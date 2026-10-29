@@ -1,5 +1,5 @@
 import { drawStrip, drawFlow, drawFunnel, drawTile, drawSpark, drawOB, ringSVG, fmt, pct, istTime } from './charts.js';
-import { initPipeline, renderPipeline, fmtL } from './pipeline.js';
+import { initPipeline, renderPipeline, spotlight, fmtL } from './pipeline.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -317,6 +317,12 @@ async function openStock(sym, list, mode = 'full') {
   b.querySelector('[data-full]')?.addEventListener('click', () => openStock(sym, list, 'full'));
   $$('[data-go]', b).forEach((btn) => (btn.onclick = () => {
     const go = btn.dataset.go; closeSheet();
+    if (wide.matches) { // one-screen pipeline: spotlight instead of scrolling
+      spotlight(sym, go === 'flow');
+      const el = document.querySelector(`.p-card[data-sym="${CSS.escape(sym)}"]`);
+      if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+      return;
+    }
     if (go === 'flow') { flowHL = sym; renderFlow(); jump('flow'); }
     if (go === 'tile') jumpToTile(sym);
     if (go === 'setup') {
@@ -379,7 +385,7 @@ function openSector(name) {
 const search = $('#search'), q = $('#q');
 function openSearch() { search.classList.remove('hidden'); q.value = ''; runSearch(); q.focus(); }
 function closeSearch() { search.classList.add('hidden'); }
-$('#searchBtn').onclick = openSearch; $('#qClose').onclick = closeSearch;
+$('#searchBtn').onclick = openSearch; $('#topSearch').onclick = openSearch; $('#qClose').onclick = closeSearch;
 q.oninput = runSearch;
 q.onkeydown = (e) => { if (e.key === 'Enter') { const f = $('#qRes .q-row'); if (f) { closeSearch(); openStock(f.dataset.sym); } } };
 function runSearch() {
@@ -394,7 +400,8 @@ function runSearch() {
 function renderJournal() {
   const rows = store.get('journal', []);
   const pnl = (r) => (r.exit ? (r.side === 'LONG' ? r.exit - r.entry : r.entry - r.exit) * r.qty : null);
-  const total = rows.reduce((a, r) => a + (pnl(r) || 0), 0);
+  const mtm = (r) => { const l = bySym.get(r.sym)?.price; return pnl(r) ?? (l ? (r.side === 'LONG' ? l - r.entry : r.entry - l) * r.qty : 0); };
+  const total = rows.reduce((a, r) => a + mtm(r), 0);
   const wins = rows.filter((r) => pnl(r) > 0).length, closed = rows.filter((r) => r.exit).length;
   $('#journal').innerHTML = `<div class="subpage"><h1>Trading Journal</h1><p class="lead">Log trades from the scanner. Stored privately in this browser.</p>
     <div class="card"><div class="form">
@@ -403,7 +410,7 @@ function renderJournal() {
       <input id="jEntry" type="number" step="0.05" placeholder="Entry" /><input id="jExit" type="number" step="0.05" placeholder="Exit (optional)" />
       <input id="jQty" type="number" placeholder="Qty" /><button class="btn" id="jAdd">Add trade</button>
     </div></div>
-    <div class="card"><h3>Total P&amp;L <span class="mono ${total >= 0 ? 'up' : 'dn'}">₹${fmt(total)}</span> · Win rate ${closed ? Math.round((wins / closed) * 100) : 0}% · ${rows.length} trades</h3>
+    <div class="card"><h3>Total P&amp;L (incl. open) <span class="mono ${total >= 0 ? 'up' : 'dn'}">₹${fmt(total)}</span> · Win rate ${closed ? Math.round((wins / closed) * 100) : 0}% · ${rows.length} trades</h3>
     <table class="j"><tr><th>Date</th><th>Symbol</th><th>Side</th><th>Entry</th><th>Exit</th><th>Qty</th><th>LTP</th><th>P&amp;L</th><th></th></tr>
     ${rows.map((r, i) => { const l = bySym.get(r.sym)?.price; const p = pnl(r) ?? (l ? (r.side === 'LONG' ? l - r.entry : r.entry - l) * r.qty : null);
       return `<tr><td>${r.date}</td><td><b>${r.sym}</b></td><td>${r.side}</td><td class="n">${fmt(r.entry)}</td><td class="n">${r.exit ? fmt(r.exit) : 'open'}</td><td class="n">${r.qty}</td><td class="n">${l ? fmt(l) : '—'}</td><td class="n ${p >= 0 ? 'up' : 'dn'}">${p == null ? '—' : '₹' + fmt(p)}</td><td><button data-del="${i}">✕</button></td></tr>`; }).join('')}</table></div></div>`;

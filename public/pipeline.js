@@ -46,6 +46,8 @@ export function initPipeline(c) {
   });
 }
 
+export function spotlight(sym, withPop = true) { setSpot(sym, withPop); }
+
 function setSpot(sym, withPop) {
   spot = sym; sectorSpot = null;
   $('#pBody').classList.add('dim');
@@ -94,6 +96,7 @@ function buildCols(force) {
     el.onmouseleave = clearSpot;
     el.onclick = () => ctx.openStock(el.dataset.sym, sideList(el.dataset.side).map((s) => s.sym));
   });
+  if (spot) $(`.p-card[data-sym="${CSS.escape(spot)}"]`)?.classList.add('spot');
 }
 
 function card(s, kind, sd) {
@@ -163,7 +166,7 @@ function drawFlowAndLinks() {
 
   // axes
   g.font = "500 9px 'JetBrains Mono'"; g.fillStyle = TX3;
-  for (const hh of [10, 11, 12, 13, 14, 15]) { const t = istMid + hh * 3600; if (t > lastT) break; g.fillText(`${hh}:00`, X(t) - 12, h - 6); }
+  for (const hh of [10, 11, 12, 13, 14, 15]) { const t = istMid + hh * 3600; if (t > lastT - 1500) break; g.fillText(`${hh}:00`, X(t) - 12, h - 6); }
   g.strokeStyle = LINE; g.lineWidth = 1;
   for (const p of [-4, -3, -2, -1, 1, 2, 3, 4, 5, 6]) { if (Math.abs(p) > max) continue; g.globalAlpha = 0.35; g.beginPath(); g.moveTo(0, Y(p)); g.lineTo(nowX, Y(p)); g.stroke(); g.globalAlpha = 1; g.fillText(`${p > 0 ? '+' : ''}${p}%`, nowX - 30, Y(p) - 2); }
   // side gauges

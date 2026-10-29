@@ -1,44 +1,138 @@
+<div align="center">
+
 # OrderUnlock
 
-Free, real-time order block scanner for NSE F&O stocks. Every feature is open — no plans, no locks.
+**Free, real-time order block scanner for NSE stocks: every feature open, no plans, no paywall.**
+
+Live prices for 141 F&O stocks · order blocks, BOS, FVG, VWAP · real futures OI build-up from Upstox · flow → contenders → top setups pipeline
+
+![OrderUnlock desktop pipeline](docs/desktop-pipeline.png)
+
+</div>
+
+---
+
+## Contents
+
+- [Screens](#screens)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Futures OI (Upstox)](#futures-oi-upstox)
+- [How the analysis works](#how-the-analysis-works)
+- [Architecture](#architecture)
+- [API](#api)
+- [Limits](#limits)
+
+## Screens
+
+| Hover spotlight on the flow | Stock modal |
+|---|---|
+| ![Spotlight](docs/desktop-spotlight.png) | ![Modal](docs/desktop-modal.png) |
+| **Sector breakdown** | **Light theme** |
+| ![Sector](docs/desktop-sector.png) | ![Light](docs/desktop-light.png) |
+
+<p align="center">
+  <img src="docs/mobile-market.png" width="260" alt="Mobile market" />
+  <img src="docs/mobile-flow.png" width="260" alt="Mobile flow" />
+  <img src="docs/mobile-top.png" width="260" alt="Mobile top setup" />
+</p>
+
+## Features
+
+### Desktop pipeline (≥ 1200 px): one screen, left to right
+
+| Part | What it shows |
+|---|---|
+| **Market strip** | Every stock as a dot by % change. Stacks show breadth; the day's best and worst are ringed. Click a dot to open the stock. |
+| **Flow** | Each stock's % change from previous close through the session. Green above the zero line, red below; NIFTY and BANKNIFTY in blue. A vertical *now* bar, then the end-of-session distribution. |
+| **Sectors on the flow** | Each sector is pinned at its average % on the same scale as the flow, with one bar segment per stock. Hover a sector to light up its stocks' lines; click for the full list. |
+| **Contender columns** | Ranks 18–24 → 11–17 → 7–10 → 4–6 per side, narrowing toward the top. Curves connect each line's endpoint to its card. Cards show a volume-by-price profile, live price, active OB band and build-up tag. |
+| **Top setups** | The 3 strongest bullish and 3 strongest bearish setups: conviction ring, live chart with order blocks and levels, and the support / zone / resistance / R:R row. |
+| **Hover spotlight** | Hovering any flow line makes it glow and dims everything else. Its sector row and card light up, and a quick-look popover shows price, rank, conviction, Δ VWAP, OI and tag. Hovering a card spotlights its line. |
+
+### Mobile / narrow layout
+
+The same data stacked vertically: Market → Setups (tap to jump, hold for details) → Sectors → Flow → Bullish contenders + #1 → Bearish contenders + #1, with sticky **MARKET · FLOW · ▲TOP · ▼TOP** tabs.
+
+### Everywhere
+
+- **Stock modal:** intraday sparkline, a 5-minute chart with order blocks (live and mitigated), FVGs, VWAP, EMA-20, Z / S1–S3 / R1–R3. Stats: Rank, Conviction, OI and ΔOI, Build-up, RVOL, Δ VWAP, VWAP, OB, Z/S1, R1/R2, R:R, Structure, Day H/L, Pattern, Rule. **FLOW / TILE / SETUP** buttons jump to that stock; **← / →** step through the list.
+- **Search** (`/`): by symbol, company or sector.
+- **Trading journal:** log long/short trades and see live mark-to-market P&L and win rate (stored in your browser).
+- **Learn:** plain-language explanation of every metric and chart.
+- **Settings:** theme and Upstox OI connection status.
+- **Light & dark themes**, live market-status pill (IST hours), stale-data banner.
+
+## Quick start
 
 ```bash
-npm start            # http://localhost:4173
+git clone https://github.com/vedantkhursange/OrderUnlock.git
+cd OrderUnlock
+npm start
 ```
 
-Needs Node 20+. No dependencies.
-
-## What it shows
-
-| Section | What it is |
-|---|---|
-| **Market strip** | Every stock as a dot by % change; stacks show breadth; best/worst ringed. Click a dot → stock modal. |
-| **Setups** | Top 3 bullish + top 3 bearish by conviction. Tap → jump to its tile, hold (or right-click) → modal. |
-| **Sectors** | Avg % change + one bar segment per stock. Click → sector list with TOP / CONTENDER / HERD status. |
-| **Flow** | Each stock's % from previous close through the session, NIFTY/BANKNIFTY lines, end-of-day distribution, TOP-5 boxes. Click a line to isolate it. |
-| **Contenders** | Ranks 2–20 per side in tiers (11–20, 6–10, 2–5). Tiles are volume-by-price profiles with live price and active OB. |
-| **Top card** | #1 bullish / #1 bearish: candles, order blocks, FVGs, VWAP, EMA-20, Z / S1–S3 / R1–R3, R:R, tag. |
-| **Stock modal** | Intraday sparkline, full OB chart, Rank, Conviction, RVOL, Δ VWAP, OB, Z/S1, R1/R2, R:R, structure, rule; FLOW / TILE / SETUP jumps, ←/→ to step. |
-| **Journal / Learn / Settings** | Local trading journal with live P&L, glossary of every metric, theme. |
-
-## How it works
-
-- `lib/feed.js` — polls Yahoo Finance's public chart API: 20-symbol `spark` batches (~1s cycle, backs off on HTTP 429) for live prices and 1-minute session closes; per-symbol 5-minute candles (5 sessions) round-robin for structure. The live price patches the newest candle every tick.
-- `lib/engine.js` — fractal pivots → break of structure → order blocks (last opposite candle before a displacement move), mitigation, FVGs, VWAP, EMA, levels, conviction score (−100…+100), R:R, tags.
-- `server.js` — ranks both sides, pushes state over Server-Sent Events every second and flow series every 15s.
-- `public/` — vanilla JS + canvas, no build step.
+Open **http://localhost:4173**. Requires Node 20+, with no dependencies and no build step. The first load takes ~1 minute while 5-day candles for every stock are fetched.
 
 ## Futures OI (Upstox)
 
-- **Public mode (default, no keys):** previous-day and current OI for each stock's near-month future come from Upstox's open candle API. Every contract is read once at startup, then refreshed one by one (~every 2–3 min each) to stay inside Upstox's rate limits.
-- **Live mode:** copy `.env.example` to `.env`, add your Upstox API key/secret (redirect URL `http://localhost:4173/auth/upstox/callback`), restart, then *Settings → Connect Upstox*. OI for all contracts then refreshes every 2 seconds. The token lasts until 3:30 AM IST, so connect once a day. `.env` and the token file are git-ignored.
-- Build-up = futures price change vs OI change: long build-up, short build-up, short covering, long unwinding. It feeds the conviction score and the card tags.
+OI works out of the box with no account:
 
-## Desktop pipeline
+| Mode | Source | Refresh |
+|---|---|---|
+| **Public** (default) | Upstox open candle API: previous-day OI from daily candles, today's OI from 1-minute candles | Every contract read at startup, then each one every ~2–3 min (paced under Upstox rate limits) |
+| **Live** (optional) | Upstox full market quotes for all 136 contracts in one call | **Every 2 seconds** |
 
-At ≥1200px the scanner becomes one screen: flow chart (sectors pinned at their average %, NIFTY/BANKNIFTY in blue) → now bar → curves into contender columns (ranks 18–24, 11–17, 7–10, 4–6) → top 3 bullish / bearish cards. Hovering a line spotlights it, its sector and its card, with a quick-look popover; hovering a card spotlights its line. Click anything for the full modal. Narrower screens get the stacked mobile layout.
+To enable live mode:
+
+1. Create an app at <https://account.upstox.com/developer/apps> with redirect URL `http://localhost:4173/auth/upstox/callback`.
+2. `cp .env.example .env` and fill in `UPSTOX_API_KEY` and `UPSTOX_API_SECRET`.
+3. Restart, open **Settings → Connect Upstox** and sign in. The token lasts until 3:30 AM IST, so connect once per trading day.
+
+`.env` and the saved token are git-ignored and never leave your machine.
+
+**Build-up** is read from the near-month future: price ↑ + OI ↑ = *Long build-up*, price ↓ + OI ↑ = *Short build-up*, price ↑ + OI ↓ = *Short covering*, price ↓ + OI ↓ = *Long unwinding*.
+
+## How the analysis works
+
+All on 5-minute candles over the last 5 sessions, recomputed every second with the live price patched into the newest candle (`lib/engine.js`):
+
+1. **Pivots:** fractal swing highs and lows (3 bars each side).
+2. **Break of structure:** the first close beyond a swing. Its direction is the stock's structure.
+3. **Order blocks:** the last opposite-colour candle before a BOS impulse of at least 1.2 × ATR. A block is *mitigated* once a candle closes through it.
+4. **Fair value gaps:** unfilled 3-candle imbalances.
+5. **Levels:** Z = nearest live OB edge; S1–S3 / R1–R3 = clustered swing lows/highs and day extremes.
+6. **Conviction (−100…+100):** day change, distance from VWAP, EMA-20 slope, EMA 20/50 stack, last BOS, proximity to a live OB and OI build-up, scaled by relative volume.
+7. **Ranking:** each side is sorted by conviction. #1 = TOP, 2–24 = contenders, the rest = herd.
+8. **R:R:** to the first target ≥ 1 ATR away, against a stop just beyond the OB.
+
+## Architecture
+
+```
+lib/universe.js   141 NSE F&O stocks by sector (+ NIFTY, BANKNIFTY)
+lib/feed.js       Yahoo Finance chart API: 20-symbol spark batches (~1 s), 5-day 5-min candles round-robin, 429 back-off
+lib/oi.js         Upstox: instrument master → near-month futures, prev-day + intraday OI, optional OAuth quotes
+lib/engine.js     pivots, BOS, order blocks, FVG, VWAP, EMA, levels, conviction, R:R, tags
+server.js         ranks both sides, Server-Sent Events: state every 1 s, flow every 15 s; static files; Upstox auth routes
+public/           vanilla JS + canvas (app.js, pipeline.js, charts.js), no framework, no build
+```
+
+## API
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/stream` | SSE: `state` (every 1 s) and `flow` (every 15 s) |
+| `GET /api/state` | All stocks with price, change, score, rank, status, levels, OI, build-up |
+| `GET /api/flow` | Per-stock session % series |
+| `GET /api/stock/:sym` | Candles, VWAP, EMA, full analysis, intraday closes |
+| `GET /api/oi/status` | OI mode, coverage and freshness |
 
 ## Limits
 
-- Yahoo's NSE feed can lag the exchange slightly; for true tick data plug a broker websocket (Upstox / Kite / Dhan) into `Feed`.
-- Educational tool, not investment advice.
+- Prices come from Yahoo Finance's public feed. They update about every second but can trail the exchange slightly; for tick-exact data, connect a broker websocket in `lib/feed.js`.
+- Public-mode OI is minutes old; connect Upstox for 2-second OI.
+- All levels and scores are OrderUnlock's own calculations.
+- **Educational tool, not investment advice.** Trade at your own risk.
+
+## License
+
+MIT
