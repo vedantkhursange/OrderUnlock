@@ -1,0 +1,13 @@
+{
+  "name": "orderunlock",
+  "version": "0.1.0",
+  "description": "Free, real-time order block scanner for NSE stocks",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}

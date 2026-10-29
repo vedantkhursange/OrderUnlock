@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>OrderUnlock · Live NSE Order Blocks</title>
+  <link rel="icon" href="/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- desktop rail / mobile drawer -->
+  <aside id="nav" class="nav">
+    <div class="nav-brand"><img src="/logo.svg" alt="" /><span>OrderUnlock</span></div>
+    <a class="nav-item active" data-page="home"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg><span>Scanner</span><i class="live-dot"></i><em>LIVE</em></a>
+    <div class="nav-label">GROW</div>
+    <a class="nav-item" data-page="journal"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11"/></svg><span>Trading Journal</span></a>
+    <a class="nav-item" data-page="learn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg><span>Learn</span></a>
+    <div class="nav-label">ACCOUNT</div>
+    <a class="nav-item" data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Settings</span></a>
+    <div class="nav-foot">
+      <div class="free-card"><b>Everything unlocked</b><small>All features free · no plans</small></div>
+      <div class="row"><span class="mkt-pill" data-mkt><i></i><b>Market</b></span><button class="theme-btn" data-theme-toggle aria-label="Toggle theme">◐</button></div>
+    </div>
+  </aside>
+  <div id="scrim" class="scrim"></div>
+
+  <div class="app">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="brand">OrderUnlock <span class="live"><i></i>LIVE</span></div>
+      <div class="top-right">
+        <span class="mkt-pill" data-mkt><i></i><b>Market</b></span>
+        <div class="seg theme-seg"><button data-set-theme="light" aria-label="Light">☀</button><button data-set-theme="dark" aria-label="Dark">☾</button></div>
+        <span class="free-pill">FREE · ALL OPEN</span>
+      </div>
+    </header>
+    <div id="banner" class="banner hidden"><i></i><span>Waiting for the next update…</span></div>
+
+    <nav class="tabs" id="tabs">
+      <button data-jump="market" class="on"><b>MARKET</b><span class="mini-bar"><i class="g"></i><i class="r"></i></span></button>
+      <button data-jump="flow"><b>FLOW</b><span class="cnt" id="tFlow">—</span></button>
+      <button data-jump="top-bull"><b class="up">▲ TOP</b><span class="cnt g" id="tBull">—</span></button>
+      <button data-jump="top-bear"><b class="dn">▼ TOP</b><span class="cnt r" id="tBear">—</span></button>
+      <button class="search-btn" id="searchBtn" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button>
+    </nav>
+
+    <main id="home" class="page">
+      <div class="rail-line"></div>
+
+      <section id="market" class="sec">
+        <div class="sec-h"><i class="node"></i><h2>MARKET</h2><span class="muted" id="mktMeta">— STOCKS</span><span class="rule"></span></div>
+        <div class="idx-row" id="idxRow"></div>
+        <div class="strip-wrap">
+          <canvas id="strip"></canvas>
+          <div class="strip-legend">
+            <div class="up">▲ BULLISH <b id="nBull">0</b></div>
+            <div class="dn">▼ BEARISH <b id="nBear">0</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h"><i class="radar"></i><b id="nSetups" class="muted">6</b><h2>SETUPS</h2><span class="rule"></span><span class="hint">TAP TO JUMP · HOLD FOR DETAILS</span></div>
+        <div class="setups" id="setups"></div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h"><h2 class="sm">SECTORS</h2><span class="muted" id="nSectors"></span></div>
+        <div class="sectors" id="sectors"></div>
+      </section>
+
+      <section id="flow" class="sec">
+        <div class="sec-h"><h2>FLOW</h2><span class="muted" id="flowRange">09:15 → —</span><span class="rule"></span><button class="icon-btn sm" id="flowReset" aria-label="Reset highlight">↻</button></div>
+        <div class="flow-wrap"><canvas id="flowCv"></canvas></div>
+      </section>
+
+      <section id="bull-contenders" class="sec">
+        <div class="sec-h"><h2 class="up">▲ BULLISH</h2><span class="muted"><b id="nBullC">0</b> CONTENDERS</span><span class="rule"></span></div>
+        <canvas class="funnel" id="funnelBull"></canvas>
+        <div class="tiers" id="tiersBull"></div>
+      </section>
+      <section id="top-bull" class="sec"><div class="top-card" id="topBull"></div></section>
+
+      <section id="bear-contenders" class="sec">
+        <div class="sec-h"><h2 class="dn">▼ BEARISH</h2><span class="muted"><b id="nBearC">0</b> CONTENDERS</span><span class="rule"></span></div>
+        <canvas class="funnel" id="funnelBear"></canvas>
+        <div class="tiers" id="tiersBear"></div>
+      </section>
+      <section id="top-bear" class="sec"><div class="top-card" id="topBear"></div></section>
+
+      <footer class="foot">
+        Live NSE prices via Yahoo Finance public feed (~1s refresh, exchange delay may apply). Order blocks, levels and scores are computed by OrderUnlock from 5-minute candles.
+        Educational tool — not investment advice.
+      </footer>
+    </main>
+
+    <main id="journal" class="page hidden"></main>
+    <main id="learn" class="page hidden"></main>
+    <main id="settings" class="page hidden"></main>
+  </div>
+
+  <!-- bottom sheet modal -->
+  <div id="sheetScrim" class="sheet-scrim"></div>
+  <div id="sheet" class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div id="sheetBody"></div></div>
+
+  <!-- search -->
+  <div id="search" class="search hidden">
+    <div class="search-box"><input id="q" placeholder="Search NSE stock or sector…" autocomplete="off" /><button class="icon-btn" id="qClose">✕</button></div>
+    <div id="qRes" class="q-res"></div>
+  </div>
+
+  <div id="tip" class="tip hidden"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

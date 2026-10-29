@@ -1,0 +1,147 @@
+// OrderUnlock server: live NSE feed -> order block engine -> SSE stream (1s).
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { allStocks, INDICES } from './lib/universe.js';
+import { Feed } from './lib/feed.js';
+import { analyze, seriesFor, profile } from './lib/engine.js';
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT) || 4173;
+const CONTENDERS = 20;
+
+const stocks = allStocks();
+const sectorOf = new Map(stocks.map((s) => [s.sym, s.sector]));
+const feed = new Feed([...stocks.map((s) => s.sym), ...Object.values(INDICES)]);
+
+// ---- market clock (IST) -------------------------------------------------
+function marketStatus(now = new Date()) {
+  const ist = new Date(now.getTime() + (330 + now.getTimezoneOffset()) * 60000);
+  const d = ist.getDay(), m = ist.getHours() * 60 + ist.getMinutes();
+  if (d === 0 || d === 6) return 'closed';
+  if (m >= 555 && m < 930) return 'open';
+  if (m >= 540 && m < 555) return 'pre-open';
+  return 'closed';
+}
+
+// ---- state -------------------------------------------------------------
+let state = { ts: 0, stocks: [] };
+const analysis = new Map();
+
+const downsample = (arr, step) => arr.filter((_, i) => i % step === 0 || i === arr.length - 1);
+
+function rebuild() {
+  const rows = [];
+  for (const { sym, sector } of stocks) {
+    const q = feed.quotes.get(sym);
+    if (!q) continue;
+    const a = analyze(sym, feed.candles.get(sym), q);
+    if (a) analysis.set(sym, a);
+    const prev = analysis.get(sym);
+    rows.push({
+      sym, sector, name: feed.names.get(sym) || sym,
+      price: q.price, prev: q.prevClose, chg: ((q.price - q.prevClose) / q.prevClose) * 100,
+      tickDir: Math.sign(q.price - q.prevPrice),
+      ...(prev ? {
+        score: prev.score, bias: prev.bias, tag: prev.tag, rule: prev.rule,
+        zone: prev.zone, R: prev.R, S: prev.S, rr: prev.rr, stop: prev.stop, target: prev.target,
+        vwap: prev.vwap, dvwap: prev.dvwap, rvol: prev.rvol, structure: prev.structure,
+        dayHigh: prev.dayHigh, dayLow: prev.dayLow,
+      } : { score: 0, bias: 'neutral' }),
+    });
+  }
+  // Rank each side by conviction.
+  const bulls = rows.filter((r) => r.score > 0).sort((a, b) => b.score - a.score);
+  const bears = rows.filter((r) => r.score < 0).sort((a, b) => a.score - b.score);
+  for (const r of rows) { r.status = 'HERD'; r.rank = null; r.side = null; }
+  bulls.forEach((r, i) => { r.rank = i + 1; r.side = 'bull'; r.status = i === 0 ? 'TOP' : i < CONTENDERS ? 'CONTENDER' : 'HERD'; });
+  bears.forEach((r, i) => { r.rank = i + 1; r.side = 'bear'; r.status = i === 0 ? 'TOP' : i < CONTENDERS ? 'CONTENDER' : 'HERD'; });
+  for (const r of [...bulls.slice(0, CONTENDERS), ...bears.slice(0, CONTENDERS)]) {
+    const cs = feed.candles.get(r.sym);
+    if (cs) r.profile = profile(cs.slice(-75), 20);
+  }
+
+  const idx = {};
+  for (const [name, y] of Object.entries(INDICES)) {
+    const q = feed.quotes.get(y);
+    if (q) idx[name] = { price: q.price, chg: ((q.price - q.prevClose) / q.prevClose) * 100 };
+  }
+  state = {
+    ts: Date.now(), market: marketStatus(), lastTick: feed.lastTick,
+    asOf: Math.max(0, ...rows.map((r) => feed.quotes.get(r.sym).ts)) * 1000,
+    counts: { total: rows.length, bull: bulls.length, bear: bears.length },
+    indices: idx, stocks: rows,
+  };
+}
+
+function flowPayload() {
+  const out = {};
+  for (const { sym } of stocks) {
+    const q = feed.quotes.get(sym);
+    if (!q || !q.closes.length) continue;
+    const t = downsample(q.times, 3), c = downsample(q.closes, 3);
+    out[sym] = { t, p: c.map((v) => +(((v - q.prevClose) / q.prevClose) * 100).toFixed(3)) };
+  }
+  return out;
+}
+
+// ---- http ---------------------------------------------------------------
+const clients = new Set();
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
+
+function json(res, body) {
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(body));
+}
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/api/stream') {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+    res.write(`event: state\ndata: ${JSON.stringify(state)}\n\n`);
+    res.write(`event: flow\ndata: ${JSON.stringify(flowPayload())}\n\n`);
+    clients.add(res);
+    req.on('close', () => clients.delete(res));
+    return;
+  }
+  if (url.pathname === '/api/state') return json(res, state);
+  if (url.pathname === '/api/flow') return json(res, flowPayload());
+  if (url.pathname.startsWith('/api/stock/')) {
+    const sym = decodeURIComponent(url.pathname.slice(11));
+    const cs = feed.candles.get(sym), q = feed.quotes.get(sym);
+    if (!cs || !q) { res.writeHead(404); return res.end('{}'); }
+    return json(res, {
+      sym, name: feed.names.get(sym) || sym, sector: sectorOf.get(sym),
+      analysis: analysis.get(sym) || null,
+      series: seriesFor(cs, Number(url.searchParams.get('bars')) || 75),
+      intraday: { t: q.times, c: q.closes, prev: q.prevClose },
+    });
+  }
+  let file = path.join(ROOT, 'public', url.pathname === '/' ? 'index.html' : url.pathname);
+  if (!file.startsWith(path.join(ROOT, 'public'))) { res.writeHead(403); return res.end(); }
+  fs.readFile(file, (err, buf) => {
+    if (err) { // SPA fallback
+      return fs.readFile(path.join(ROOT, 'public', 'index.html'), (e2, b2) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(b2); });
+    }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    res.end(buf);
+  });
+});
+
+function broadcast(event, data) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const c of clients) c.write(msg);
+}
+
+(async () => {
+  console.log('OrderUnlock: loading NSE universe…');
+  const boot = await feed.bootstrap();
+  console.log(`Live symbols: ${boot.live}. Dropped: ${boot.dropped.join(', ') || 'none'}`);
+  feed.runSpark();
+  feed.runCandles();
+  rebuild();
+  setInterval(() => { rebuild(); broadcast('state', state); }, 1000);
+  setInterval(() => broadcast('flow', flowPayload()), 15000);
+  server.listen(PORT, () => console.log(`OrderUnlock running → http://localhost:${PORT}`));
+})();
