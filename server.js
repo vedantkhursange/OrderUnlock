@@ -9,6 +9,7 @@ import { analyze, seriesFor, profile } from './lib/engine.js';
 import { OpenInterest } from './lib/oi.js';
 import { buildPlan, sessionPhase, replayORB } from './lib/plans.js';
 import { SignalTracker } from './lib/signals.js';
+import { Logos } from './lib/logos.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // minimal .env loader (UPSTOX_API_KEY, UPSTOX_API_SECRET, UPSTOX_REDIRECT_URI, PORT)
@@ -27,6 +28,7 @@ const feed = new Feed([...stocks.map((s) => s.sym), ...Object.values(INDICES)]);
 const DATA = path.join(ROOT, 'data');
 fs.mkdirSync(DATA, { recursive: true });
 const signals = new SignalTracker(DATA);
+const logos = new Logos(path.join(DATA, 'logos'));
 const plans = new Map(); // sym -> { story, plan }
 const oi = new OpenInterest(stocks.map((s) => s.sym), {
   apiKey: process.env.UPSTOX_API_KEY, apiSecret: process.env.UPSTOX_API_SECRET,
@@ -133,6 +135,11 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname === '/api/state') return json(res, state);
+  if (url.pathname.startsWith('/logo/')) {
+    const sym = decodeURIComponent(url.pathname.slice(6)).toUpperCase();
+    logos.get(sym).then(({ type, body }) => { res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'public, max-age=604800' }); res.end(body); });
+    return;
+  }
   if (url.pathname === '/api/oi/status') return json(res, oi.status());
   if (url.pathname === '/api/signals') {
     const replay = [];

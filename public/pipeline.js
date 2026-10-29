@@ -1,5 +1,5 @@
 // Desktop pipeline: flow → narrowing contender columns → top 3 per side, all on one screen.
-import { setup, css, alpha, fmt, pct, istTime, drawTile, drawOB, drawStrip, ringSVG } from './charts.js';
+import { setup, css, alpha, fmt, pct, istTime, drawTile, drawOB, drawStrip, ringSVG, logo } from './charts.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -104,7 +104,7 @@ function card(s, kind, sd) {
   if (kind === 'top') return `
     <div class="p-card top ${sd}-c" data-sym="${s.sym}" data-side="${sd}">
       <div class="pt-l">
-        <div class="pt-sym"><b>${s.sym}</b><small>#${s.rank}</small></div>
+        <div class="pt-sym"><b>${logo(s.sym)}${s.sym}</b><small>#${s.rank}</small></div>
         <div class="pt-badge-row"><span class="badge ${sd}">${sd === 'bull' ? 'BULLISH' : 'BEARISH'}</span><span data-ring></span></div>
         <div class="pt-px mono" data-px></div>
       </div>
@@ -114,7 +114,7 @@ function card(s, kind, sd) {
   return `
     <div class="p-card ${kind} ${sd}-c" data-sym="${s.sym}" data-side="${sd}">
       <canvas data-prof></canvas>
-      <div class="pc-lbl"><b>${s.sym}</b><small class="mono" data-chg></small></div>
+      <div class="pc-lbl"><b>${logo(s.sym)}${s.sym}</b><small class="mono" data-chg></small></div>
       <span class="pc-rk mono">#${s.rank}</span>
       ${kind !== 'mini' ? `<span class="pc-tag" style="color:var(--${c})" data-tag></span>` : ''}
     </div>`;
@@ -310,7 +310,7 @@ function showPop(sym) {
   const y = geo.Y(f.p.at(-1));
   const c = s.side === 'bear' ? 'r' : 'g';
   pop.innerHTML = `
-    <div class="pp-h"><b>${s.sym}</b><span class="st-badge ${s.status === 'HERD' ? 'herd' : ''}" style="--tc:var(--${c});--tcol:var(--${c})">${s.status}${s.rank ? ` #${s.rank}` : ''}</span></div>
+    <div class="pp-h"><b>${logo(s.sym)}${s.sym}</b><span class="st-badge ${s.status === 'HERD' ? 'herd' : ''}" style="--tc:var(--${c});--tcol:var(--${c})">${s.status}${s.rank ? ` #${s.rank}` : ''}</span></div>
     <div class="pp-n">${s.name} · ${s.sector}</div>
     <div class="pp-px mono">${fmt(s.price)} <span class="${s.chg >= 0 ? 'up' : 'dn'}">${pct(s.chg)}</span></div>
     <canvas class="pp-spark"></canvas>
