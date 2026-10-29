@@ -1,4 +1,5 @@
 import { drawStrip, drawFlow, drawFunnel, drawTile, drawSpark, drawOB, ringSVG, fmt, pct, istTime } from './charts.js';
+import { initPipeline, renderPipeline, fmtL } from './pipeline.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -11,7 +12,7 @@ let S = null;            // latest server state
 let FLOW = {};           // per-stock intraday % series
 const bySym = new Map();
 const stockCache = new Map(); // sym -> { data, at }
-let flowHL = null, stripHits = [], flowApi = null;
+let flowHL = null, flowHover = null, stripHits = [], flowApi = null;
 let sheet = null;        // { type, sym, list, idx }
 
 // ------------------------------------------------------------------ theme
@@ -31,6 +32,7 @@ scrim.onclick = () => { nav.classList.remove('open'); scrim.classList.remove('on
 $$('.nav-item').forEach((a) => (a.onclick = () => { showPage(a.dataset.page); scrim.onclick(); }));
 function showPage(p) {
   $$('.page').forEach((el) => el.classList.toggle('hidden', el.id !== p));
+  $('#pipeline').classList.toggle('hidden', p !== 'home');
   $$('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.page === p));
   $('#tabs').classList.toggle('hidden', p !== 'home');
   if (p === 'journal') renderJournal();
@@ -52,11 +54,20 @@ const spy = new IntersectionObserver((es) => {
 }, { rootMargin: '-45% 0px -50% 0px' });
 ['market', 'flow', 'bull-contenders', 'top-bull', 'bear-contenders', 'top-bear'].forEach((id) => spy.observe(document.getElementById(id)));
 
+// ------------------------------------------------------------------ desktop pipeline vs mobile stack
+const wide = matchMedia('(min-width: 1200px)');
+const isPipe = () => wide.matches && !$('#home').dataset.sub;
+function applyMode() {
+  document.body.classList.toggle('pipe', wide.matches);
+  if (S) renderAll(true);
+}
+wide.addEventListener('change', applyMode);
+
 // ------------------------------------------------------------------ data stream
 function connect() {
   const es = new EventSource('/api/stream');
   es.addEventListener('state', (e) => { S = JSON.parse(e.data); bySym.clear(); S.stocks.forEach((s) => bySym.set(s.sym, s)); patchFlow(); renderAll(); });
-  es.addEventListener('flow', (e) => { FLOW = JSON.parse(e.data); patchFlow(); renderFlow(); });
+  es.addEventListener('flow', (e) => { FLOW = JSON.parse(e.data); patchFlow(); if (wide.matches) renderPipeline(); else renderFlow(); });
   es.onerror = () => { $('#banner').classList.remove('hidden'); $('#banner span').textContent = 'Reconnecting to live feed…'; };
 }
 // keep the newest flow point in step with the 1s ticks
@@ -79,6 +90,7 @@ let lastTiersKey = '', lastSetupKey = '', lastSectorKey = '';
 function renderAll(force) {
   if (!S || $('#home').classList.contains('hidden')) return;
   renderHeader();
+  if (wide.matches) { renderPipeline(force); if (sheet && sheet.type === 'stock') liveSheet(); return; }
   stripHits = drawStrip($('#strip'), S.stocks);
   renderSetups(force);
   renderSectors(force);
@@ -155,7 +167,7 @@ function renderFlow() {
     const t = Math.max(...syms.map((k) => FLOW[k].t.at(-1) || 0));
     $('#flowRange').textContent = `09:15 → ${istTime(t)}`;
   }
-  flowApi = drawFlow($('#flowCv'), FLOW, S.stocks, { highlight: flowHL, indices: S.indices });
+  flowApi = drawFlow($('#flowCv'), FLOW, S.stocks, { highlight: flowHover || flowHL, indices: S.indices });
 }
 
 // tiers: ranks 2–5, 6–10, 11–20 (wide→narrow towards the #1 card)
@@ -190,8 +202,8 @@ function renderTiers(force) {
 async function getStock(sym, maxAge = 12000) {
   const c = stockCache.get(sym);
   if (c && Date.now() - c.at < maxAge) return c.data;
-  const r = await fetch(`/api/stock/${encodeURIComponent(sym)}?bars=90`);
-  if (!r.ok) return c?.data || null;
+  const r = await fetch(`/api/stock/${encodeURIComponent(sym)}?bars=90`).catch(() => null);
+  if (!r || !r.ok) return c?.data || null;
   const data = await r.json();
   stockCache.set(sym, { data, at: Date.now() });
   return data;
@@ -214,7 +226,7 @@ async function renderTop(sd, force) {
   host.querySelector('[data-ring]').innerHTML = ringSVG(s.score, sd);
   host.querySelector('[data-px]').innerHTML = `${fmt(s.price)}<small class="${s.chg >= 0 ? 'up' : 'dn'}">${pct(s.chg)} · ${s.chg >= 0 ? '+' : ''}${fmt(s.price - s.prev)}</small>`;
   host.querySelector('[data-tag]').textContent = s.tag || '';
-  host.querySelector('[data-sub]').textContent = `RVOL ${s.rvol?.toFixed(2)}× · Δ VWAP ${pct(s.dvwap)}`;
+  host.querySelector('[data-sub]').textContent = s.oi != null ? `OI ${fmtL(s.oi)} · Δ ${pct(s.dOIpct)} · RVOL ${s.rvol?.toFixed(2)}×` : `RVOL ${s.rvol?.toFixed(2)}× · Δ VWAP ${pct(s.dvwap)}`;
   if (s.zone) host.querySelector('[data-lv]').innerHTML = `
     <div><span>Z</span>${fmt(s.zone.bot)} – ${fmt(s.zone.top)}</div><div class="s"><span>S1</span>${fmt(s.S[0])}</div>
     <div class="r"><span>R1</span>${fmt(s.R[0])}</div><div class="r"><span>R2</span>${fmt(s.R[1])}</div><div><span>R:R</span>${s.rr.toFixed(2)}</div>`;
@@ -246,20 +258,26 @@ $('#strip').addEventListener('mouseleave', hideTip);
 $('#strip').addEventListener('click', (e) => { const s = stripHit(e); if (s) openStock(s.sym); });
 
 const flowCv = $('#flowCv');
+// hover spotlights the line under the pointer, exactly like a click does
+let hoverRaf = 0;
 flowCv.addEventListener('mousemove', (e) => {
   if (!flowApi) return; const r = flowCv.getBoundingClientRect();
   const sym = flowApi.hit(e.clientX - r.left, e.clientY - r.top);
   const s = sym && bySym.get(sym);
-  s ? showTip(e, `<b>${s.sym}</b> ${pct(s.chg)}`) : hideTip();
+  s ? showTip(e, `<b>${s.sym}</b> ${pct(s.chg)} · ${s.sector}`) : hideTip();
+  if (sym && sym !== flowHover) {
+    flowHover = sym;
+    cancelAnimationFrame(hoverRaf); hoverRaf = requestAnimationFrame(renderFlow);
+  }
 });
-flowCv.addEventListener('mouseleave', hideTip);
+flowCv.addEventListener('mouseleave', () => { hideTip(); flowHover = null; renderFlow(); });
 flowCv.addEventListener('click', (e) => {
   if (!flowApi) return; const r = flowCv.getBoundingClientRect();
   const sym = flowApi.hit(e.clientX - r.left, e.clientY - r.top);
   flowHL = sym; renderFlow();
   if (sym) openStock(sym, null, 'compact');
 });
-$('#flowReset').onclick = () => { flowHL = null; renderFlow(); };
+$('#flowReset').onclick = () => { flowHL = null; flowHover = null; renderFlow(); };
 
 // ------------------------------------------------------------------ sheet
 const sheetEl = $('#sheet'), sheetScrim = $('#sheetScrim');
@@ -321,6 +339,8 @@ async function liveSheet(fetchNow) {
   b.querySelector('[data-stats]').innerHTML = s.zone ? `
     <div><span>RANK</span><b>${s.rank ? `#${s.rank} ${s.side === 'bear' ? 'BEAR' : 'BULL'}` : '—'} · ${s.status}</b></div>
     <div><span>CONV</span><b>${s.score > 0 ? '+' : ''}${s.score}<i class="conv"><i style="width:${conv}%;background:var(--${sd})"></i></i></b></div>
+    <div><span>OI</span><b>${s.oi != null ? `${fmtL(s.oi)} <span class="${s.dOIpct >= 0 ? 'up' : 'dn'}">${pct(s.dOIpct)}</span>` : '—'}</b></div>
+    <div><span>BUILD-UP</span><b class="${/LONG BUILD|SHORT COVER/.test(s.buildup || '') ? 'up' : s.buildup ? 'dn' : ''}">${s.buildup || '—'}</b></div>
     <div><span>RVOL</span><b>${s.rvol.toFixed(2)}×</b></div>
     <div><span>Δ VWAP</span><b class="${s.dvwap >= 0 ? 'up' : 'dn'}">${pct(s.dvwap)}</b></div>
     <div><span>VWAP</span><b>${fmt(s.vwap)}</b></div>
@@ -330,7 +350,7 @@ async function liveSheet(fetchNow) {
     <div><span>R:R</span><b>${s.rr.toFixed(2)}</b></div>
     <div><span>STRUCTURE</span><b>${s.structure === 'bull' ? 'BOS ↑' : s.structure === 'bear' ? 'BOS ↓' : '—'}</b></div>
     <div><span>DAY H / L</span><b>${fmt(s.dayHigh)} / ${fmt(s.dayLow)}</b></div>
-    <div><span>TAG</span><b>${s.tag}</b></div>
+    <div><span>PATTERN</span><b>${s.pattern || s.tag}</b></div>
     <div style="grid-column:1/-1"><span>RULE</span><b>${s.rule}</b></div>` : '<div><span>Loading analysis…</span></div>';
   const data = await getStock(sym, fetchNow ? 4000 : 10000);
   if (!data || !sheet || sheet.sym !== sym) return;
@@ -418,14 +438,23 @@ function renderSettings() {
   $('#settings').innerHTML = `<div class="subpage"><h1>Settings</h1><p class="lead">Everything is free and unlocked. Preferences stay in this browser.</p>
     <div class="card"><h3>Theme</h3><p><button class="pill-btn" data-t="dark">Dark</button> <button class="pill-btn" data-t="light">Light</button></p></div>
     <div class="card"><h3>Data</h3><p>Prices: Yahoo Finance public NSE feed, polled about once a second for ${S?.counts.total ?? '—'} F&amp;O stocks. Structure: 5-minute candles, last 5 sessions, refreshed continuously.</p></div>
+    <div class="card"><h3>Futures OI · Upstox</h3><p id="oiStatus">Checking…</p></div>
     <div class="card"><h3>Shortcuts</h3><p><b>/</b> search · <b>←/→</b> previous / next stock in a modal · <b>Esc</b> close</p></div></div>`;
   $$('[data-t]').forEach((b) => (b.onclick = () => setTheme(b.dataset.t)));
+  fetch('/api/oi/status').then((r) => r.json()).then((o) => {
+    const age = o.oldestSec != null ? ` · oldest reading ${Math.round(o.oldestSec / 60)} min old` : '';
+    $('#oiStatus').innerHTML = o.loggedIn
+      ? `<b class="up">Live</b> — signed in${o.user ? ` as ${o.user}` : ''}. OI for ${o.withOI}/${o.contracts} stock futures refreshes every 2 seconds. <a href="/auth/upstox/logout">Disconnect</a>`
+      : `<b>Public mode</b> — OI for ${o.withOI}/${o.contracts} stock futures from Upstox's open candle API, refreshed every few minutes${age}.<br>` +
+        (o.configured ? `<a class="btn" style="display:inline-block;margin-top:10px;text-decoration:none" href="/auth/upstox">Connect Upstox for 2-second OI</a>`
+          : `For 2-second OI, put your Upstox API key and secret in <code>.env</code> (see <code>.env.example</code>), restart, then come back here to connect.`);
+  }).catch(() => {});
 }
 
 // ------------------------------------------------------------------ loops
 let ft = 0;
 function animate(t) {
-  if (!$('#home').classList.contains('hidden') && S) {
+  if (!$('#home').classList.contains('hidden') && S && !wide.matches) {
     const nb = S.stocks.filter((s) => s.side === 'bull' && s.status !== 'HERD').length;
     const nr = S.stocks.filter((s) => s.side === 'bear' && s.status !== 'HERD').length;
     if (t - ft > 33) { drawFunnel($('#funnelBull'), nb, '--g', t); drawFunnel($('#funnelBear'), nr, '--r', t); ft = t; }
@@ -434,4 +463,6 @@ function animate(t) {
 }
 requestAnimationFrame(animate);
 addEventListener('resize', () => renderAll(true));
+initPipeline({ getS: () => S, getFlow: () => FLOW, bySym, getStock, openStock: (sym, list) => openStock(sym, list), openSector: (n) => openSector(n) });
+applyMode();
 connect();

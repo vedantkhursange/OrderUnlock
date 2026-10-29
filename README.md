@@ -28,8 +28,17 @@ Needs Node 20+. No dependencies.
 - `server.js` — ranks both sides, pushes state over Server-Sent Events every second and flow series every 15s.
 - `public/` — vanilla JS + canvas, no build step.
 
+## Futures OI (Upstox)
+
+- **Public mode (default, no keys):** previous-day and current OI for each stock's near-month future come from Upstox's open candle API. Every contract is read once at startup, then refreshed one by one (~every 2–3 min each) to stay inside Upstox's rate limits.
+- **Live mode:** copy `.env.example` to `.env`, add your Upstox API key/secret (redirect URL `http://localhost:4173/auth/upstox/callback`), restart, then *Settings → Connect Upstox*. OI for all contracts then refreshes every 2 seconds. The token lasts until 3:30 AM IST, so connect once a day. `.env` and the token file are git-ignored.
+- Build-up = futures price change vs OI change: long build-up, short build-up, short covering, long unwinding. It feeds the conviction score and the card tags.
+
+## Desktop pipeline
+
+At ≥1200px the scanner becomes one screen: flow chart (sectors pinned at their average %, NIFTY/BANKNIFTY in blue) → now bar → curves into contender columns (ranks 18–24, 11–17, 7–10, 4–6) → top 3 bullish / bearish cards. Hovering a line spotlights it, its sector and its card, with a quick-look popover; hovering a card spotlights its line. Click anything for the full modal. Narrower screens get the stacked mobile layout.
+
 ## Limits
 
 - Yahoo's NSE feed can lag the exchange slightly; for true tick data plug a broker websocket (Upstox / Kite / Dhan) into `Feed`.
-- Futures open interest is not included (no free public API); build-up tags use price + relative volume.
 - Educational tool, not investment advice.

@@ -286,7 +286,7 @@ export function drawSpark(cv, intraday) {
 }
 
 // ---------------------------------------------------------------- order block chart
-export function drawOB(cv, data, live) {
+export function drawOB(cv, data, live, opts = {}) {
   const { ctx, w, h } = setup(cv);
   const G = css('--g'), R = css('--r'), TX = css('--tx'), TX3 = css('--tx3'), LINE = css('--line'), AM = css('--amber'), BLUE = css('--blue');
   const a = data.analysis; const { c, vwap, ema } = data.series;
@@ -294,7 +294,7 @@ export function drawOB(cv, data, live) {
   const candles = c.map((k) => ({ ...k }));
   if (live && live.price) { const L = candles.at(-1); L.c = live.price; L.h = Math.max(L.h, live.price); L.l = Math.min(L.l, live.price); }
   const price = candles.at(-1).c;
-  const padL = 8, padR = 92, padT = 14, padB = 22;
+  const padL = 4, padR = opts.compact ? 62 : 92, padT = opts.compact ? 8 : 14, padB = opts.compact ? 4 : 22;
   const levels = a ? [...a.R, ...a.S, a.zone.top, a.zone.bot] : [];
   let lo = Math.min(...candles.map((k) => k.l)), hi = Math.max(...candles.map((k) => k.h));
   for (const l of levels) { if (l > lo - (hi - lo) * 0.25 && l < hi + (hi - lo) * 0.25) { lo = Math.min(lo, l); hi = Math.max(hi, l); } }
@@ -307,7 +307,7 @@ export function drawOB(cv, data, live) {
   // grid
   ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.font = font(9, 500); ctx.fillStyle = TX3;
   for (let i = 0; i <= 4; i++) { const y = padT + (i / 4) * (h - padT - padB); ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke(); ctx.globalAlpha = 1; }
-  for (let i = 0; i < n; i += Math.ceil(n / 6)) { ctx.fillText(istTime(candles[i].t), X(i) - 12, h - 6); ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.moveTo(X(i), padT); ctx.lineTo(X(i), h - padB); ctx.stroke(); ctx.globalAlpha = 1; }
+  if (!opts.compact) for (let i = 0; i < n; i += Math.ceil(n / 6)) { ctx.fillText(istTime(candles[i].t), X(i) - 12, h - 6); ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.moveTo(X(i), padT); ctx.lineTo(X(i), h - padB); ctx.stroke(); ctx.globalAlpha = 1; }
 
   if (a) {
     // historical order blocks
@@ -354,7 +354,7 @@ export function drawOB(cv, data, live) {
     ctx.strokeStyle = alpha(col, 0.7); ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR + 4, y); ctx.stroke(); ctx.setLineDash([]);
     ctx.font = font(10, 800); ctx.fillStyle = col; ctx.fillText(text, w - padR + 8, y + 3);
-    ctx.font = font(10, 600); ctx.fillStyle = alpha(col, 0.85); ctx.fillText(fmt(val, val > 1000 ? 0 : 1), w - padR + 30, y + 3);
+    ctx.font = font(10, 600); ctx.fillStyle = alpha(col, 0.85); ctx.fillText(fmt(val, val > 1000 ? 0 : 1), w - padR + (opts.compact ? 22 : 30), y + 3);
   };
   if (a) {
     const placed = [];

@@ -6,14 +6,27 @@ import { fileURLToPath } from 'node:url';
 import { allStocks, INDICES } from './lib/universe.js';
 import { Feed } from './lib/feed.js';
 import { analyze, seriesFor, profile } from './lib/engine.js';
+import { OpenInterest } from './lib/oi.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+// minimal .env loader (UPSTOX_API_KEY, UPSTOX_API_SECRET, UPSTOX_REDIRECT_URI, PORT)
+try {
+  for (const line of fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+} catch {}
 const PORT = Number(process.env.PORT) || 4173;
-const CONTENDERS = 20;
+const CONTENDERS = 24;
 
 const stocks = allStocks();
 const sectorOf = new Map(stocks.map((s) => [s.sym, s.sector]));
 const feed = new Feed([...stocks.map((s) => s.sym), ...Object.values(INDICES)]);
+const oi = new OpenInterest(stocks.map((s) => s.sym), {
+  apiKey: process.env.UPSTOX_API_KEY, apiSecret: process.env.UPSTOX_API_SECRET,
+  redirectUri: process.env.UPSTOX_REDIRECT_URI || `http://localhost:${PORT}/auth/upstox/callback`,
+  tokenFile: path.join(ROOT, '.upstox-token.json'),
+});
 
 // ---- market clock (IST) -------------------------------------------------
 function marketStatus(now = new Date()) {
@@ -36,15 +49,17 @@ function rebuild() {
   for (const { sym, sector } of stocks) {
     const q = feed.quotes.get(sym);
     if (!q) continue;
-    const a = analyze(sym, feed.candles.get(sym), q);
+    const o = oi.data.get(sym);
+    const a = analyze(sym, feed.candles.get(sym), q, o);
     if (a) analysis.set(sym, a);
     const prev = analysis.get(sym);
     rows.push({
       sym, sector, name: feed.names.get(sym) || sym,
       price: q.price, prev: q.prevClose, chg: ((q.price - q.prevClose) / q.prevClose) * 100,
       tickDir: Math.sign(q.price - q.prevPrice),
+      ...(o && o.oi != null ? { oi: o.oi, prevOI: o.prevOI, dOI: o.dOI, dOIpct: o.dOIpct, buildup: o.buildup, fut: o.fut, futChg: o.futChg, lot: oi.contracts.get(sym)?.lot } : {}),
       ...(prev ? {
-        score: prev.score, bias: prev.bias, tag: prev.tag, rule: prev.rule,
+        score: prev.score, bias: prev.bias, tag: prev.tag, pattern: prev.pattern, rule: prev.rule,
         zone: prev.zone, R: prev.R, S: prev.S, rr: prev.rr, stop: prev.stop, target: prev.target,
         vwap: prev.vwap, dvwap: prev.dvwap, rvol: prev.rvol, structure: prev.structure,
         dayHigh: prev.dayHigh, dayLow: prev.dayLow,
@@ -71,6 +86,7 @@ function rebuild() {
     ts: Date.now(), market: marketStatus(), lastTick: feed.lastTick,
     asOf: Math.max(0, ...rows.map((r) => feed.quotes.get(r.sym).ts)) * 1000,
     counts: { total: rows.length, bull: bulls.length, bear: bears.length },
+    oi: oi.status(),
     indices: idx, stocks: rows,
   };
 }
@@ -106,6 +122,19 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname === '/api/state') return json(res, state);
+  if (url.pathname === '/api/oi/status') return json(res, oi.status());
+  if (url.pathname === '/auth/upstox') {
+    if (!oi.configured) { res.writeHead(400, { 'Content-Type': 'text/plain' }); return res.end('Add UPSTOX_API_KEY and UPSTOX_API_SECRET to .env, then restart.'); }
+    res.writeHead(302, { Location: oi.authUrl() }); return res.end();
+  }
+  if (url.pathname === '/auth/upstox/callback') {
+    const code = url.searchParams.get('code');
+    oi.exchangeCode(code || '')
+      .then(() => { res.writeHead(302, { Location: '/?upstox=connected' }); res.end(); })
+      .catch((e) => { res.writeHead(400, { 'Content-Type': 'text/plain' }); res.end(`Upstox login failed: ${e.message}`); });
+    return;
+  }
+  if (url.pathname === '/auth/upstox/logout') { oi.logout(); res.writeHead(302, { Location: '/' }); return res.end(); }
   if (url.pathname === '/api/flow') return json(res, flowPayload());
   if (url.pathname.startsWith('/api/stock/')) {
     const sym = decodeURIComponent(url.pathname.slice(11));
@@ -140,6 +169,7 @@ function broadcast(event, data) {
   console.log(`Live symbols: ${boot.live}. Dropped: ${boot.dropped.join(', ') || 'none'}`);
   feed.runSpark();
   feed.runCandles();
+  oi.run().catch((e) => console.warn('OI feed stopped:', e.message));
   rebuild();
   setInterval(() => { rebuild(); broadcast('state', state); }, 1000);
   setInterval(() => broadcast('flow', flowPayload()), 15000);
