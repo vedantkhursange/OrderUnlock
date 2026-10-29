@@ -1,4 +1,4 @@
-import { drawStrip, drawFlow, drawFunnel, drawTile, drawSpark, drawOB, ringSVG, fmt, pct, istTime } from './charts.js';
+import { drawStrip, drawFlow, drawFunnel, drawTile, drawSpark, drawOB, ringSVG, fmt, pct, istTime, logo } from './charts.js';
 import { initPipeline, renderPipeline, spotlight, fmtL } from './pipeline.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -85,7 +85,6 @@ function patchFlow() {
 // ------------------------------------------------------------------ render
 const side = (s) => (s.side === 'bear' ? 'bear' : 'bull');
 const statusLabel = (s) => (s.status === 'TOP' ? (s.side === 'bear' ? '▼ BEARISH' : '▲ BULLISH') : s.status);
-const ini = (sym) => sym.replace(/[^A-Z]/g, '').slice(0, 2);
 let lastTiersKey = '', lastSetupKey = '', lastSectorKey = '';
 
 function renderAll(force) {
@@ -123,7 +122,7 @@ function renderSetups(force) {
   const key = list.map((s) => s.sym).join();
   if (force || key !== lastSetupKey) {
     lastSetupKey = key;
-    $('#setups').innerHTML = list.map((s) => `<div class="setup ${side(s)}" data-sym="${s.sym}"><div class="av">${ini(s.sym)}</div><div><b>${s.sym}</b><small></small></div></div>`).join('');
+    $('#setups').innerHTML = list.map((s) => `<div class="setup ${side(s)}" data-sym="${s.sym}"><div class="av">${logo(s.sym)}</div><div><b>${s.sym}</b><small></small></div></div>`).join('');
     $$('#setups .setup').forEach((el) => bindHold(el, () => jumpToTile(el.dataset.sym), () => openStock(el.dataset.sym, list.map((s) => s.sym))));
   }
   $$('#setups .setup').forEach((el) => { const s = bySym.get(el.dataset.sym); if (s) { const sm = el.querySelector('small'); sm.textContent = `${fmt(s.price)} ${pct(s.chg)}`; sm.className = s.chg >= 0 ? 'up' : 'dn'; } });
@@ -188,7 +187,7 @@ function renderTiers(force) {
         const h = cols === 4 ? 104 : cols === 3 ? 124 : 150;
         return `<div class="tier ${sd}-c"><div class="tier-h">RANK ${a}–${b}</div><div class="tier-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${items.map((s) => `
           <div class="tile ${sd}-c" data-sym="${s.sym}" style="height:${h}px"><canvas></canvas>
-            <div class="lbl">${s.sym}<small class="${s.chg >= 0 ? 'up' : 'dn'}"></small></div><span class="rk">#${s.rank}</span>
+            <div class="lbl">${logo(s.sym)}${s.sym}<small class="${s.chg >= 0 ? 'up' : 'dn'}"></small></div><span class="rk">#${s.rank}</span>
             ${cols <= 2 ? `<span class="tg" style="color:var(--${sd === 'bull' ? 'g' : 'r'})">${s.tag || ''}</span>` : ''}</div>`).join('')}</div></div>`;
       }).join('');
       $$('.tile', host).forEach((el) => (el.onclick = () => openStock(el.dataset.sym, list.map((s) => s.sym))));
@@ -220,7 +219,7 @@ async function renderTop(sd, force) {
     host.dataset.sym = s.sym;
     host.innerHTML = `
       <div class="tc-head"><div class="badge ${sd}">${sd === 'bull' ? 'BULLISH' : 'BEARISH'}</div><span data-ring></span>
-        <div class="tc-sym">${s.sym}<small>${s.name} · ${s.sector}</small></div><div class="tc-px" data-px></div></div>
+        <div class="tc-sym">${logo(s.sym)}${s.sym}<small>${s.name} · ${s.sector}</small></div><div class="tc-px" data-px></div></div>
       <div class="tc-chart" style="--tcol:var(--${sd === 'bull' ? 'g' : 'r'})"><div class="tc-tag"><b data-tag></b><div data-sub></div></div><canvas></canvas></div>
       <div class="tc-levels" data-lv></div>`;
     host.onclick = () => openStock(s.sym, S.stocks.filter((x) => x.side === sd && x.status !== 'HERD').sort((a, b) => a.rank - b.rank).map((x) => x.sym));
@@ -255,7 +254,7 @@ function stripHit(e) {
   for (const h of stripHits) { const d = Math.hypot(h.x - mx, h.y - my); if (d < (h.r || bd)) { bd = d; best = h.s; } }
   return best;
 }
-$('#strip').addEventListener('mousemove', (e) => { const s = stripHit(e); s ? showTip(e, `<b>${s.sym}</b> ${pct(s.chg)}<br>${s.sector}`) : hideTip(); });
+$('#strip').addEventListener('mousemove', (e) => { const s = stripHit(e); s ? showTip(e, `<b>${logo(s.sym)}${s.sym}</b> ${pct(s.chg)}<br>${s.sector}`) : hideTip(); });
 $('#strip').addEventListener('mouseleave', hideTip);
 $('#strip').addEventListener('click', (e) => { const s = stripHit(e); if (s) openStock(s.sym); });
 
@@ -266,7 +265,7 @@ flowCv.addEventListener('mousemove', (e) => {
   if (!flowApi) return; const r = flowCv.getBoundingClientRect();
   const sym = flowApi.hit(e.clientX - r.left, e.clientY - r.top);
   const s = sym && bySym.get(sym);
-  s ? showTip(e, `<b>${s.sym}</b> ${pct(s.chg)} · ${s.sector}`) : hideTip();
+  s ? showTip(e, `<b>${logo(s.sym)}${s.sym}</b> ${pct(s.chg)} · ${s.sector}`) : hideTip();
   if (sym && sym !== flowHover) {
     flowHover = sym;
     cancelAnimationFrame(hoverRaf); hoverRaf = requestAnimationFrame(renderFlow);
@@ -302,7 +301,7 @@ async function openStock(sym, list, mode = 'full') {
   const st = s.status === 'HERD' ? 'herd' : '';
   openSheet(`
     <div class="sh-head ${sd}-c" style="--tcol:var(--${sd === 'bull' ? 'g' : 'r'})">
-      <div class="sh-av">${ini(sym)}</div>
+      <div class="sh-av">${logo(sym)}</div>
       <div class="sh-title"><b>${sym}</b><span class="st-badge ${st}">${statusLabel(s)}${s.rank ? ` #${s.rank}` : ''}</span><small>${s.name} · ${s.sector}</small></div>
       <div class="sh-nav"><button class="icon-btn" data-prev>‹</button><button class="icon-btn" data-next>›</button><button class="icon-btn x" data-close>✕</button></div>
     </div>
@@ -412,7 +411,7 @@ function openSector(name) {
       <small>${sec.list.length} STOCKS · <span class="up">▲ ${up}</span> <span class="dn">▼ ${sec.list.length - up}</span></small></div>
       <div class="sh-nav"><button class="icon-btn x" data-close>✕</button></div></div>
     <div class="segbar" style="height:6px;margin:14px 0 6px">${sec.list.map((x) => `<i style="background:${x.chg >= 0 ? 'var(--g)' : 'var(--r)'}"></i>`).join('')}</div>
-    <div class="sec-list">${sec.list.map((s) => `<div class="row" data-sym="${s.sym}"><b>${s.sym}</b><span class="nm">${s.name}</span>
+    <div class="sec-list">${sec.list.map((s) => `<div class="row" data-sym="${s.sym}"><b>${logo(s.sym)}${s.sym}</b><span class="nm">${s.name}</span>
       <span class="mono ${s.chg >= 0 ? 'up' : 'dn'}">${pct(s.chg)}</span>
       <span class="st ${s.status === 'HERD' ? '' : s.side === 'bear' ? 'dn' : 'up'}" style="${s.status === 'HERD' ? 'color:var(--tx3)' : ''}">${statusLabel(s)}${s.status !== 'HERD' ? ` #${s.rank}` : ''}</span></div>`).join('')}</div>`);
   $('#sheetBody [data-close]').onclick = closeSheet;
@@ -430,7 +429,7 @@ function runSearch() {
   if (!S) return;
   const v = q.value.trim().toUpperCase();
   const res = S.stocks.filter((s) => !v || s.sym.includes(v) || s.name.toUpperCase().includes(v) || s.sector.toUpperCase().includes(v)).sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 30);
-  $('#qRes').innerHTML = res.map((s) => `<div class="q-row" data-sym="${s.sym}"><b>${s.sym}</b><span class="nm">${s.name} · ${s.sector}</span><span class="mono">${fmt(s.price)}</span><span class="mono ${s.chg >= 0 ? 'up' : 'dn'}">${pct(s.chg)}</span></div>`).join('');
+  $('#qRes').innerHTML = res.map((s) => `<div class="q-row" data-sym="${s.sym}"><b>${logo(s.sym)}${s.sym}</b><span class="nm">${s.name} · ${s.sector}</span><span class="mono">${fmt(s.price)}</span><span class="mono ${s.chg >= 0 ? 'up' : 'dn'}">${pct(s.chg)}</span></div>`).join('');
   $$('#qRes .q-row').forEach((r) => (r.onclick = () => { closeSearch(); openStock(r.dataset.sym); }));
 }
 
@@ -451,7 +450,7 @@ function renderJournal() {
     <div class="card"><h3>Total P&amp;L (incl. open) <span class="mono ${total >= 0 ? 'up' : 'dn'}">₹${fmt(total)}</span> · Win rate ${closed ? Math.round((wins / closed) * 100) : 0}% · ${rows.length} trades</h3>
     <table class="j"><tr><th>Date</th><th>Symbol</th><th>Side</th><th>Entry</th><th>Exit</th><th>Qty</th><th>LTP</th><th>P&amp;L</th><th></th></tr>
     ${rows.map((r, i) => { const l = bySym.get(r.sym)?.price; const p = pnl(r) ?? (l ? (r.side === 'LONG' ? l - r.entry : r.entry - l) * r.qty : null);
-      return `<tr><td>${r.date}</td><td><b>${r.sym}</b></td><td>${r.side}</td><td class="n">${fmt(r.entry)}</td><td class="n">${r.exit ? fmt(r.exit) : 'open'}</td><td class="n">${r.qty}</td><td class="n">${l ? fmt(l) : '—'}</td><td class="n ${p >= 0 ? 'up' : 'dn'}">${p == null ? '—' : '₹' + fmt(p)}</td><td><button data-del="${i}">✕</button></td></tr>`; }).join('')}</table></div></div>`;
+      return `<tr><td>${r.date}</td><td><b>${logo(r.sym)}${r.sym}</b></td><td>${r.side}</td><td class="n">${fmt(r.entry)}</td><td class="n">${r.exit ? fmt(r.exit) : 'open'}</td><td class="n">${r.qty}</td><td class="n">${l ? fmt(l) : '—'}</td><td class="n ${p >= 0 ? 'up' : 'dn'}">${p == null ? '—' : '₹' + fmt(p)}</td><td><button data-del="${i}">✕</button></td></tr>`; }).join('')}</table></div></div>`;
   $('#jSym').oninput = (e) => { const s = bySym.get(e.target.value.toUpperCase()); if (s) $('#jEntry').value = s.price; };
   $('#jAdd').onclick = () => {
     const sym = $('#jSym').value.trim().toUpperCase(), entry = +$('#jEntry').value, qty = +$('#jQty').value;
@@ -513,17 +512,17 @@ async function renderSignals() {
     <div class="card">
       <div class="tabs-mini">${[['ready', 'Ready now'], ['wait', 'Waiting'], ['all', 'All']].map(([k, l]) => `<button data-f="${k}" class="${sigFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <table class="j sig"><tr><th>Stock</th><th>Setup</th><th>State</th><th>LTP</th><th>Entry</th><th>Stop</th><th>Target 1</th><th>R:R</th><th>Conf</th></tr>
-      ${rows.slice(0, 60).map((p) => `<tr data-sym="${p.sym}"><td><b>${p.sym}</b><small>${p.sector}</small></td><td class="${p.side === 'BUY' ? 'up' : 'dn'}">${p.side} · ${p.setup.replace(/ (LONG|SHORT)$/, '')}</td><td><span class="st ${STATE_CLS[p.state]}">${p.state}</span></td>
+      ${rows.slice(0, 60).map((p) => `<tr data-sym="${p.sym}"><td><b>${logo(p.sym)}${p.sym}</b><small>${p.sector}</small></td><td class="${p.side === 'BUY' ? 'up' : 'dn'}">${p.side} · ${p.setup.replace(/ (LONG|SHORT)$/, '')}</td><td><span class="st ${STATE_CLS[p.state]}">${p.state}</span></td>
         <td class="n">${fmt(p.price)}</td><td class="n">${fmt(p.entry)}</td><td class="n dn">${fmt(p.stop)}</td><td class="n up">${fmt(p.t1)}</td><td class="n">${p.rr}</td><td class="n"><span class="conf-mini"><i style="width:${p.conf}%"></i></span>${p.conf}%</td></tr>`).join('') || `<tr><td colspan="9" class="muted" style="padding:18px">${ses.canEnter ? 'Nothing is at its entry right now. Patience is part of the strategy.' : `No entries during "${ses.label}". Switch to "All" to study the plans.`}</td></tr>`}
       </table>
     </div>
     <div class="card"><h3>Today's opening-range breakout replay</h3>
       <p class="muted-p">Every stock that closed a 5-min candle outside its 09:15–09:30 range before 14:30, taken mechanically: stop at the other side of the range, half booked at 1.5R, rest at 3R or 15:15. If a candle touched both stop and target, it counts as a loss.</p>
       <table class="j sig"><tr><th>Stock</th><th>Side</th><th>Entry</th><th>Range</th><th>Stop</th><th>Exit</th><th>Outcome</th><th>R</th></tr>
-      ${d.replay.map((x) => `<tr data-sym="${x.sym}"><td><b>${x.sym}</b><small>${x.sector}</small></td><td class="${x.side === 'BUY' ? 'up' : 'dn'}">${x.side}</td><td class="n">₹${fmt(x.entry)} <small>${x.entryTime}</small></td><td class="n">${fmt(x.orL)} – ${fmt(x.orH)}</td><td class="n">${fmt(x.stop)}</td><td class="n">₹${fmt(x.exit)} <small>${x.exitTime}</small></td><td>${x.outcome}</td><td class="n ${x.r > 0 ? 'up' : x.r < 0 ? 'dn' : ''}">${x.r > 0 ? '+' : ''}${x.r}</td></tr>`).join('')}
+      ${d.replay.map((x) => `<tr data-sym="${x.sym}"><td><b>${logo(x.sym)}${x.sym}</b><small>${x.sector}</small></td><td class="${x.side === 'BUY' ? 'up' : 'dn'}">${x.side}</td><td class="n">₹${fmt(x.entry)} <small>${x.entryTime}</small></td><td class="n">${fmt(x.orL)} – ${fmt(x.orH)}</td><td class="n">${fmt(x.stop)}</td><td class="n">₹${fmt(x.exit)} <small>${x.exitTime}</small></td><td>${x.outcome}</td><td class="n ${x.r > 0 ? 'up' : x.r < 0 ? 'dn' : ''}">${x.r > 0 ? '+' : ''}${x.r}</td></tr>`).join('')}
       </table></div>
     ${d.list.length ? `<div class="card"><h3>Signals recorded live today</h3><table class="j sig"><tr><th>Time</th><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>T1</th><th>Status</th><th>R</th></tr>
-      ${d.list.slice().reverse().map((x) => `<tr data-sym="${x.sym}"><td class="n">${istTime(x.at / 1000)}</td><td><b>${x.sym}</b></td><td class="${x.side === 'BUY' ? 'up' : 'dn'}">${x.setup}</td><td class="n">${fmt(x.entry)}</td><td class="n">${fmt(x.stop)}</td><td class="n">${fmt(x.t1)}</td><td>${x.status}</td><td class="n ${x.r > 0 ? 'up' : x.r < 0 ? 'dn' : ''}">${x.r}</td></tr>`).join('')}</table></div>` : ''}
+      ${d.list.slice().reverse().map((x) => `<tr data-sym="${x.sym}"><td class="n">${istTime(x.at / 1000)}</td><td><b>${logo(x.sym)}${x.sym}</b></td><td class="${x.side === 'BUY' ? 'up' : 'dn'}">${x.setup}</td><td class="n">${fmt(x.entry)}</td><td class="n">${fmt(x.stop)}</td><td class="n">${fmt(x.t1)}</td><td>${x.status}</td><td class="n ${x.r > 0 ? 'up' : x.r < 0 ? 'dn' : ''}">${x.r}</td></tr>`).join('')}</table></div>` : ''}
     <p class="muted-p">Educational tool, not investment advice. Past results of a rule do not guarantee future results.</p>
   </div>`;
   $$('#signals [data-f]').forEach((b) => (b.onclick = () => { sigFilter = b.dataset.f; renderSignals(); }));

@@ -2,6 +2,8 @@
 export const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 export const istTime = (t) => new Date(t * 1000).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
 export const fmt = (n, d = 2) => (n == null || isNaN(n) ? '—' : Number(n).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }));
+// Company icon served (and cached) by the server; falls back to a monogram there.
+export const logo = (sym, cls = '') => `<img class="lg ${cls}" src="/logo/${encodeURIComponent(sym)}" alt="" loading="lazy" decoding="async">`;
 export const pct = (n) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`);
 
 function alpha(hex, a) {
