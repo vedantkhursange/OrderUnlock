@@ -14,6 +14,7 @@
   <aside id="nav" class="nav">
     <div class="nav-brand"><img src="/logo.svg" alt="" /><span>OrderUnlock</span></div>
     <a class="nav-item active" data-page="home"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg><span>Scanner</span><i class="live-dot"></i><em>LIVE</em></a>
+    <a class="nav-item" data-page="signals"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Signals &amp; Plans</span></a>
     <div class="nav-label">GROW</div>
     <a class="nav-item" data-page="journal"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11"/></svg><span>Trading Journal</span></a>
     <a class="nav-item" data-page="learn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg><span>Learn</span></a>
@@ -32,6 +33,7 @@
       <div class="brand">OrderUnlock <span class="live"><i></i>LIVE</span></div>
       <div class="top-right">
         <button class="top-search" id="topSearch" aria-label="Search stocks"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span>Search stocks</span><kbd>/</kbd></button>
+        <span class="phase-pill" id="phasePill" title=""></span>
         <span class="mkt-pill" data-mkt><i></i><b>Market</b></span>
         <div class="seg theme-seg"><button data-set-theme="light" aria-label="Light">☀</button><button data-set-theme="dark" aria-label="Dark">☾</button></div>
         <span class="free-pill">FREE · ALL OPEN</span>
@@ -98,6 +100,7 @@
       </footer>
     </main>
 
+    <main id="signals" class="page hidden"></main>
     <main id="journal" class="page hidden"></main>
     <main id="learn" class="page hidden"></main>
     <main id="settings" class="page hidden"></main>

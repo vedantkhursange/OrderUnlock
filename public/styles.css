@@ -299,3 +299,47 @@ body.pipe .banner { position: fixed; right: 14px; bottom: 12px; z-index: 35; bor
 .top-search kbd { margin-left: auto; font-family: var(--mono); font-size: 11px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line2); }
 .top-search:hover { color: var(--tx); border-color: var(--line2); }
 body.pipe .top-search { display: inline-flex; }
+
+/* ===================== plans & signals ===================== */
+.phase-pill { padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid var(--line2); color: var(--tx2); background: var(--panel); white-space: nowrap; }
+.phase-pill[data-phase="prime"] { color: var(--g); border-color: color-mix(in srgb, var(--g) 40%, transparent); }
+.phase-pill[data-phase="midday"], .phase-pill[data-phase="last-hour"] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
+.phase-pill[data-phase="no-new"], .phase-pill[data-phase="square-off"], .phase-pill[data-phase="opening-range"] { color: var(--r); border-color: color-mix(in srgb, var(--r) 40%, transparent); }
+.plan-box { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+.pb-col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.pb-col h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .12em; color: var(--tx3); display: flex; align-items: center; gap: 8px; }
+.story { margin: 0; padding-left: 18px; font-size: 13px; color: var(--tx2); display: flex; flex-direction: column; gap: 5px; }
+.replay { margin-top: 10px; padding: 9px 10px; border-radius: 8px; background: var(--panel2); font-size: 12px; color: var(--tx2); }
+.replay b { color: var(--tx); }
+.st { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 2px 7px; border-radius: 5px; background: var(--panel2); color: var(--tx2); }
+.st.go { background: var(--g); color: #04130b; } .st.armed { background: color-mix(in srgb, var(--amber) 85%, transparent); color: #1d1300; }
+.st.bad { background: var(--rbg); color: var(--r); } .st.off { color: var(--tx3); }
+.pl-setup { font-weight: 800; font-size: 15px; }
+.pl-action { margin: 4px 0 10px; font-size: 13px; color: var(--tx); }
+.pl-grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 10px; font-size: 13px; }
+.pl-grid span { color: var(--tx3); font-family: Inter; font-weight: 700; font-size: 10px; letter-spacing: .08em; align-self: center; }
+.conf-bar { height: 5px; border-radius: 3px; background: var(--panel2); margin: 10px 0; overflow: hidden; }
+.conf-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), var(--g)); }
+.checks { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.checks .ok { color: var(--g); } .checks .warn { color: var(--amber); }
+.pl-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.pl-foot small { color: var(--tx3); }
+.phase-card .phase-h { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 12px; }
+.phase-card .phase-h b { font-size: 16px; } .phase-card .phase-h span { color: var(--tx2); }
+.timeline { position: relative; display: flex; gap: 3px; }
+.timeline div { background: var(--panel2); border-radius: 6px; padding: 6px 6px; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.timeline div.on { background: var(--gbg); box-shadow: inset 0 0 0 1px var(--g); }
+.timeline small { font-family: var(--mono); color: var(--tx3); font-size: 10px; }
+.timeline span { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline .now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--tx); box-shadow: 0 0 8px var(--tx); }
+.score-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.score-row .big { font-size: 28px; font-weight: 800; font-family: var(--mono); margin: 4px 0; }
+.tabs-mini { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs-mini button { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line2); font-size: 12px; font-weight: 600; color: var(--tx2); }
+.tabs-mini button.on { background: var(--panel2); color: var(--tx); border-color: var(--tx3); }
+table.sig tr[data-sym] { cursor: pointer; } table.sig tr[data-sym]:hover { background: var(--panel2); }
+table.sig small { display: block; color: var(--tx3); font-size: 10px; font-family: Inter; }
+.conf-mini { display: inline-block; width: 36px; height: 4px; border-radius: 2px; background: var(--panel2); margin-right: 6px; vertical-align: middle; overflow: hidden; }
+.conf-mini i { display: block; height: 100%; background: var(--g); }
+.muted-p { color: var(--tx3); font-size: 12px; margin: 0 0 10px; }
+@media (max-width: 720px) { .plan-box, .score-row { grid-template-columns: 1fr; } .phase-pill { display: none; } table.sig { font-size: 11px; } .timeline span { display: none; } }

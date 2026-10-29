@@ -7,6 +7,8 @@ import { allStocks, INDICES } from './lib/universe.js';
 import { Feed } from './lib/feed.js';
 import { analyze, seriesFor, profile } from './lib/engine.js';
 import { OpenInterest } from './lib/oi.js';
+import { buildPlan, sessionPhase, replayORB } from './lib/plans.js';
+import { SignalTracker } from './lib/signals.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // minimal .env loader (UPSTOX_API_KEY, UPSTOX_API_SECRET, UPSTOX_REDIRECT_URI, PORT)
@@ -22,6 +24,10 @@ const CONTENDERS = 24;
 const stocks = allStocks();
 const sectorOf = new Map(stocks.map((s) => [s.sym, s.sector]));
 const feed = new Feed([...stocks.map((s) => s.sym), ...Object.values(INDICES)]);
+const DATA = path.join(ROOT, 'data');
+fs.mkdirSync(DATA, { recursive: true });
+const signals = new SignalTracker(DATA);
+const plans = new Map(); // sym -> { story, plan }
 const oi = new OpenInterest(stocks.map((s) => s.sym), {
   apiKey: process.env.UPSTOX_API_KEY, apiSecret: process.env.UPSTOX_API_SECRET,
   redirectUri: process.env.UPSTOX_REDIRECT_URI || `http://localhost:${PORT}/auth/upstox/callback`,
@@ -53,7 +59,10 @@ function rebuild() {
     const a = analyze(sym, feed.candles.get(sym), q, o);
     if (a) analysis.set(sym, a);
     const prev = analysis.get(sym);
+    const pl = prev ? buildPlan(prev, feed.candles.get(sym), q, o) : null;
+    if (pl) plans.set(sym, pl);
     rows.push({
+      ...(pl ? { plan: (({ setup, side, state, entry, stop, t1, t2, rr, conf, action }) => ({ setup, side, state, entry, stop, t1, t2, rr, conf, action }))(pl.plan) } : {}),
       sym, sector, name: feed.names.get(sym) || sym,
       price: q.price, prev: q.prevClose, chg: ((q.price - q.prevClose) / q.prevClose) * 100,
       tickDir: Math.sign(q.price - q.prevPrice),
@@ -77,6 +86,8 @@ function rebuild() {
     if (cs) r.profile = profile(cs.slice(-75), 20);
   }
 
+  signals.update(rows);
+
   const idx = {};
   for (const [name, y] of Object.entries(INDICES)) {
     const q = feed.quotes.get(y);
@@ -86,7 +97,7 @@ function rebuild() {
     ts: Date.now(), market: marketStatus(), lastTick: feed.lastTick,
     asOf: Math.max(0, ...rows.map((r) => feed.quotes.get(r.sym).ts)) * 1000,
     counts: { total: rows.length, bull: bulls.length, bear: bears.length },
-    oi: oi.status(),
+    oi: oi.status(), session: sessionPhase(), signals: signals.summary(),
     indices: idx, stocks: rows,
   };
 }
@@ -123,6 +134,21 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/state') return json(res, state);
   if (url.pathname === '/api/oi/status') return json(res, oi.status());
+  if (url.pathname === '/api/signals') {
+    const replay = [];
+    for (const { sym, sector } of stocks) {
+      const a = analysis.get(sym), rp = a && replayORB(feed.candles.get(sym), a.atr);
+      if (rp && rp.side) replay.push({ sym, sector, ...rp });
+    }
+    const done = replay.filter((x) => !/RUNNING/.test(x.outcome));
+    const wins = done.filter((x) => x.r > 0).length;
+    return json(res, {
+      summary: signals.summary(), list: signals.list, session: sessionPhase(),
+      plans: state.stocks.filter((r) => r.plan).map((r) => ({ sym: r.sym, sector: r.sector, price: r.price, chg: r.chg, score: r.score, ...r.plan })),
+      replay: replay.sort((x, y) => y.r - x.r),
+      replaySummary: { trades: replay.length, closed: done.length, wins, losses: done.length - wins, winRate: done.length ? Math.round((wins / done.length) * 100) : null, totalR: +replay.reduce((t, x) => t + x.r, 0).toFixed(2), avgR: replay.length ? +(replay.reduce((t, x) => t + x.r, 0) / replay.length).toFixed(2) : 0 },
+    });
+  }
   if (url.pathname === '/auth/upstox') {
     if (!oi.configured) { res.writeHead(400, { 'Content-Type': 'text/plain' }); return res.end('Add UPSTOX_API_KEY and UPSTOX_API_SECRET to .env, then restart.'); }
     res.writeHead(302, { Location: oi.authUrl() }); return res.end();
@@ -143,6 +169,8 @@ const server = http.createServer((req, res) => {
     return json(res, {
       sym, name: feed.names.get(sym) || sym, sector: sectorOf.get(sym),
       analysis: analysis.get(sym) || null,
+      plan: plans.get(sym) || null,
+      replay: analysis.get(sym) ? replayORB(cs, analysis.get(sym).atr) : null,
       series: seriesFor(cs, Number(url.searchParams.get('bars')) || 75),
       intraday: { t: q.times, c: q.closes, prev: q.prevClose },
     });

@@ -364,6 +364,20 @@ export function drawOB(cv, data, live, opts = {}) {
     a.S.forEach((v, i) => put(`S${i + 1}`, v, AM));
   }
 
+  // trade plan: entry / stop / target 1 on the right edge
+  if (opts.plan && !opts.compact) {
+    const pl = opts.plan;
+    const mark = (v, label, col) => {
+      const y = Y(v); if (y < padT || y > h - padB) return;
+      ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.setLineDash([6, 3]);
+      ctx.beginPath(); ctx.moveTo(w - padR - 120, y); ctx.lineTo(w - padR, y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = font(9, 800); ctx.fillStyle = col; ctx.fillText(label, w - padR - 120, y - 3);
+    };
+    mark(pl.entry, `ENTRY ${fmt(pl.entry)}`, TX);
+    mark(pl.stop, `STOP ${fmt(pl.stop)}`, R);
+    mark(pl.t1, `T1 ${fmt(pl.t1)}`, G);
+  }
+
   // price
   const py = Y(price), px = X(n - 1);
   ctx.strokeStyle = alpha(TX, 0.55); ctx.lineWidth = 1;

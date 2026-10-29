@@ -38,6 +38,7 @@ function showPage(p) {
   if (p === 'journal') renderJournal();
   if (p === 'learn') renderLearn();
   if (p === 'settings') renderSettings();
+  if (p === 'signals') renderSignals();
   if (p === 'home' && S) requestAnimationFrame(() => renderAll(true));
   window.scrollTo({ top: 0 });
 }
@@ -109,6 +110,7 @@ function renderHeader() {
   else if (stale) { b.classList.remove('hidden'); $('#banner span').textContent = 'Waiting for the next update…'; }
   else b.classList.add('hidden');
   $('#mktMeta').textContent = `${S.counts.total} STOCKS · AS OF ${new Date(S.asOf).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false })}`;
+  if (S.session) { const pp = $('#phasePill'); pp.textContent = S.session.label; pp.title = S.session.tip; pp.dataset.phase = S.session.id; }
   $('#nBull').textContent = S.counts.bull; $('#nBear').textContent = S.counts.bear;
   $('#tFlow').textContent = S.counts.total; $('#tBull').textContent = S.counts.bull; $('#tBear').textContent = S.counts.bear;
   $('#idxRow').innerHTML = Object.entries(S.indices).map(([k, v]) => `<span class="idx">${k} <b>${fmt(v.price)}</b> <span class="${v.chg >= 0 ? 'up' : 'dn'}">${pct(v.chg)}</span></span>`).join('');
@@ -308,6 +310,7 @@ async function openStock(sym, list, mode = 'full') {
       <div class="btns"><button class="pill-btn" data-go="flow">FLOW</button>${s.status !== 'HERD' ? '<button class="pill-btn" data-go="tile">TILE</button>' : ''}<button class="pill-btn" data-go="setup">SETUP</button><span class="muted">${idx + 1}/${list.length}</span></div></div>
     <div class="sh-spark"><canvas></canvas></div>
     ${mode === 'full' ? '<div class="sh-chart"><canvas></canvas></div>' : ''}
+    <div class="plan-box" data-plan></div>
     <div class="stats" data-stats></div>
     ${mode === 'compact' ? '<p style="text-align:center;margin-top:14px"><button class="pill-btn" data-full>OPEN FULL CHART</button></p>' : ''}`);
   const b = $('#sheetBody');
@@ -362,7 +365,42 @@ async function liveSheet(fetchNow) {
   if (!data || !sheet || sheet.sym !== sym) return;
   drawSpark(b.querySelector('.sh-spark canvas'), { ...data.intraday, c: [...data.intraday.c.slice(0, -1), s.price] });
   const cv = b.querySelector('.sh-chart canvas');
-  if (cv) drawOB(cv, { ...data, analysis: { ...data.analysis, ...pick(s) } }, s);
+  if (cv) drawOB(cv, { ...data, analysis: { ...data.analysis, ...pick(s) } }, s, { plan: data.plan?.plan });
+  renderPlanBox(b.querySelector('[data-plan]'), s, data);
+}
+
+const STATE_CLS = { TRIGGERED: 'go', ARMED: 'armed', WAIT: 'wait', INVALID: 'bad', EXPIRED: 'off', LATE: 'off' };
+function planText(sym, p) {
+  return `${sym} — ${p.setup}\n${p.side} near ₹${p.entry}\nStop-loss ₹${p.stop}\nTarget 1 ₹${p.t1} (R:R ${p.rr})\nTarget 2 ₹${p.t2}\nRisk per share ₹${p.riskPerShare}\nConfidence ${p.conf}%`;
+}
+function renderPlanBox(el, s, data) {
+  if (!el || !data.plan) return;
+  const { story, plan: p } = data.plan, rp = data.replay;
+  const key = JSON.stringify([p.state, p.entry, p.stop, p.conf, story.length, rp?.outcome]);
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.innerHTML = `
+    <div class="pb-col">
+      <h4>TODAY'S STORY</h4>
+      <ol class="story">${story.map((l) => `<li>${l}</li>`).join('')}</ol>
+      ${rp && rp.side ? `<div class="replay"><b>Opening-range breakout replay</b> — ${rp.side} ₹${rp.entry} at ${rp.entryTime}, stop ₹${rp.stop}, targets ₹${rp.t1} / ₹${rp.t2} → <span class="${rp.r > 0 ? 'up' : rp.r < 0 ? 'dn' : ''}">${rp.outcome} ${rp.r > 0 ? '+' : ''}${rp.r}R</span> (exit ₹${rp.exit} at ${rp.exitTime})</div>` : rp ? '<div class="replay">No opening-range breakout today — the stock stayed in its first-15-minute range.</div>' : ''}
+    </div>
+    <div class="pb-col">
+      <h4>INTRADAY PLAN <span class="st ${STATE_CLS[p.state]}">${p.state}</span></h4>
+      <div class="pl-setup ${p.side === 'BUY' ? 'up' : 'dn'}">${p.side} · ${p.setup}</div>
+      <p class="pl-action">${p.action}</p>
+      <div class="pl-grid mono">
+        <span>ENTRY</span><b>₹${fmt(p.entry)}</b><span>STOP-LOSS</span><b class="dn">₹${fmt(p.stop)}</b>
+        <span>TARGET 1</span><b class="up">₹${fmt(p.t1)}</b><span>TARGET 2</span><b class="up">₹${fmt(p.t2)}</b>
+        <span>R:R</span><b>${p.rr} / ${p.rr2}</b><span>CONFIDENCE</span><b>${p.conf}%</b>
+      </div>
+      <div class="conf-bar"><i style="width:${p.conf}%"></i></div>
+      <ul class="checks">${p.reasons.map((r) => `<li class="ok">✓ ${r}</li>`).join('')}${p.warnings.map((w) => `<li class="warn">⚠ ${w}</li>`).join('')}</ul>
+      <div class="pl-foot"><button class="pill-btn" data-copy>COPY PLAN</button><small>Risk ₹${fmt(p.riskPerShare)}/share — to risk ₹500, trade ${Math.max(1, Math.floor(500 / p.riskPerShare))} shares.</small></div>
+    </div>`;
+  el.querySelector('[data-copy]').onclick = (e) => {
+    navigator.clipboard?.writeText(planText(s.sym, { ...p, rr2: p.rr2 })).then(() => { e.target.textContent = 'COPIED ✓'; setTimeout(() => (e.target.textContent = 'COPY PLAN'), 1500); });
+  };
 }
 
 function openSector(name) {
@@ -436,9 +474,61 @@ function renderLearn() {
     ['TOP · CONTENDER · HERD', 'Stocks are ranked per side by conviction. #1 is the TOP setup, ranks 2–20 are contenders shown as tiles, everyone else is herd.'],
     ['R:R', 'Reward-to-risk: distance from price to the first target at least 1 ATR away, divided by distance to the stop just beyond the order block.'],
     ['Flow', 'Every stock\'s % change from previous close through the session. Green lines finish up, red finish down; blue lines are NIFTY and BANKNIFTY. Click any line to isolate it.'],
+    ['Trade plan & states', 'Each stock gets one intraday plan: opening-range breakout (ORB), order-block pullback, or VWAP pullback. WAIT = price not at entry yet · ARMED = close to entry · TRIGGERED = at the entry zone · INVALID = stop already broken · EXPIRED = after 14:30, no new trades.'],
+    ['Confidence', 'How many independent checks agree with the plan: side of VWAP, market structure, day direction, volume, futures OI build-up and conviction. 100% means all six agree. It is agreement, not probability of profit.'],
+    ['Opening range (ORB)', 'High and low of the first 15 minutes (09:15–09:30). A 5-min close above the high is a long breakout, below the low a short breakout. The other side of the range is the natural stop.'],
+    ['Session timing', 'Prime time 09:30–11:00 has the cleanest moves. 11:00–13:30 is a lull with fake moves. No new trades after 14:30; intraday positions are squared off at 15:15.'],
+    ['Replay & scorecard', 'The Signals page replays today\'s ORB rule on every stock and records live signals with their real outcome — use it to see how often a rule actually works before trusting it.'],
     ['Tiles', 'Volume-by-price profile: green bars from the left are up-candle volume, red bars from the right are down-candle volume. Dashed line = live price, shaded band = active OB.'],
   ];
   $('#learn').innerHTML = `<div class="subpage"><h1>Learn</h1><p class="lead">How OrderUnlock reads the market.</p>${items.map(([h, p]) => `<div class="card"><h3>${h}</h3><p>${p}</p></div>`).join('')}</div>`;
+}
+
+// ------------------------------------------------------------------ signals & plans page
+const PHASE_BAR = [['09:00', 'Pre-open', 15], ['09:15', 'Opening range', 15], ['09:30', 'Prime time', 90], ['11:00', 'Midday lull', 150], ['13:30', 'Afternoon trend', 60], ['14:30', 'No new trades', 45], ['15:15', 'Square-off', 15]];
+let sigTimer = null, sigFilter = 'ready';
+async function renderSignals() {
+  clearTimeout(sigTimer);
+  if ($('#signals').classList.contains('hidden')) return;
+  const d = await fetch('/api/signals').then((r) => r.json()).catch(() => null);
+  if (!d) return;
+  const ses = d.session, sm = d.summary, rs = d.replaySummary;
+  const nowMin = ses.min;
+  const rows = d.plans.filter((p) => sigFilter === 'all' || (sigFilter === 'ready' ? ['TRIGGERED', 'ARMED'].includes(p.state) : sigFilter === 'wait' ? p.state === 'WAIT' : true))
+    .sort((a, b) => (a.state === 'TRIGGERED' ? -1 : 0) - (b.state === 'TRIGGERED' ? -1 : 0) || b.conf - a.conf || Math.abs(b.score) - Math.abs(a.score));
+  const pct2 = (m) => ((m - 540) / 390) * 100;
+  $('#signals').innerHTML = `<div class="subpage">
+    <h1>Signals &amp; Plans</h1>
+    <p class="lead">Rule-based intraday setups for all ${d.plans.length} stocks, plus an honest record of how they actually played out. These are conditions with defined risk, not predictions.</p>
+    <div class="card phase-card">
+      <div class="phase-h"><b>${ses.label}</b><span>${ses.tip}</span></div>
+      <div class="timeline">${PHASE_BAR.map(([t, l, w]) => `<div style="flex:${w}" class="${l === ses.label ? 'on' : ''}"><small>${t}</small><span>${l}</span></div>`).join('')}
+        ${nowMin >= 540 && nowMin <= 930 ? `<i class="now" style="left:${pct2(nowMin)}%"></i>` : ''}</div>
+    </div>
+    <div class="score-row">
+      <div class="card"><h3>Live signals today</h3><div class="big">${sm.total}</div><p>${sm.closed} closed · ${sm.open} open · ${sm.winRate == null ? 'no results yet' : `${sm.winRate}% winners`} · total ${sm.totalR >= 0 ? '+' : ''}${sm.totalR}R</p></div>
+      <div class="card"><h3>Opening-range breakout replay</h3><div class="big ${rs.totalR >= 0 ? 'up' : 'dn'}">${rs.totalR >= 0 ? '+' : ''}${rs.totalR}R</div><p>${rs.trades} breakouts · ${rs.wins} won · ${rs.losses} lost · ${rs.winRate ?? '—'}% win rate · avg ${rs.avgR}R per trade</p></div>
+      <div class="card"><h3>What is "R"?</h3><p>R = the amount you risk on one trade (entry to stop-loss). −1R is a normal loss. A +2R winner pays for two losers, so you can be profitable while winning fewer than half your trades.</p></div>
+    </div>
+    <div class="card">
+      <div class="tabs-mini">${[['ready', 'Ready now'], ['wait', 'Waiting'], ['all', 'All']].map(([k, l]) => `<button data-f="${k}" class="${sigFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <table class="j sig"><tr><th>Stock</th><th>Setup</th><th>State</th><th>LTP</th><th>Entry</th><th>Stop</th><th>Target 1</th><th>R:R</th><th>Conf</th></tr>
+      ${rows.slice(0, 60).map((p) => `<tr data-sym="${p.sym}"><td><b>${p.sym}</b><small>${p.sector}</small></td><td class="${p.side === 'BUY' ? 'up' : 'dn'}">${p.side} · ${p.setup.replace(/ (LONG|SHORT)$/, '')}</td><td><span class="st ${STATE_CLS[p.state]}">${p.state}</span></td>
+        <td class="n">${fmt(p.price)}</td><td class="n">${fmt(p.entry)}</td><td class="n dn">${fmt(p.stop)}</td><td class="n up">${fmt(p.t1)}</td><td class="n">${p.rr}</td><td class="n"><span class="conf-mini"><i style="width:${p.conf}%"></i></span>${p.conf}%</td></tr>`).join('') || `<tr><td colspan="9" class="muted" style="padding:18px">${ses.canEnter ? 'Nothing is at its entry right now. Patience is part of the strategy.' : `No entries during "${ses.label}". Switch to "All" to study the plans.`}</td></tr>`}
+      </table>
+    </div>
+    <div class="card"><h3>Today's opening-range breakout replay</h3>
+      <p class="muted-p">Every stock that closed a 5-min candle outside its 09:15–09:30 range before 14:30, taken mechanically: stop at the other side of the range, half booked at 1.5R, rest at 3R or 15:15. If a candle touched both stop and target, it counts as a loss.</p>
+      <table class="j sig"><tr><th>Stock</th><th>Side</th><th>Entry</th><th>Range</th><th>Stop</th><th>Exit</th><th>Outcome</th><th>R</th></tr>
+      ${d.replay.map((x) => `<tr data-sym="${x.sym}"><td><b>${x.sym}</b><small>${x.sector}</small></td><td class="${x.side === 'BUY' ? 'up' : 'dn'}">${x.side}</td><td class="n">₹${fmt(x.entry)} <small>${x.entryTime}</small></td><td class="n">${fmt(x.orL)} – ${fmt(x.orH)}</td><td class="n">${fmt(x.stop)}</td><td class="n">₹${fmt(x.exit)} <small>${x.exitTime}</small></td><td>${x.outcome}</td><td class="n ${x.r > 0 ? 'up' : x.r < 0 ? 'dn' : ''}">${x.r > 0 ? '+' : ''}${x.r}</td></tr>`).join('')}
+      </table></div>
+    ${d.list.length ? `<div class="card"><h3>Signals recorded live today</h3><table class="j sig"><tr><th>Time</th><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>T1</th><th>Status</th><th>R</th></tr>
+      ${d.list.slice().reverse().map((x) => `<tr data-sym="${x.sym}"><td class="n">${istTime(x.at / 1000)}</td><td><b>${x.sym}</b></td><td class="${x.side === 'BUY' ? 'up' : 'dn'}">${x.setup}</td><td class="n">${fmt(x.entry)}</td><td class="n">${fmt(x.stop)}</td><td class="n">${fmt(x.t1)}</td><td>${x.status}</td><td class="n ${x.r > 0 ? 'up' : x.r < 0 ? 'dn' : ''}">${x.r}</td></tr>`).join('')}</table></div>` : ''}
+    <p class="muted-p">Educational tool, not investment advice. Past results of a rule do not guarantee future results.</p>
+  </div>`;
+  $$('#signals [data-f]').forEach((b) => (b.onclick = () => { sigFilter = b.dataset.f; renderSignals(); }));
+  $$('#signals tr[data-sym]').forEach((tr) => (tr.onclick = () => openStock(tr.dataset.sym)));
+  sigTimer = setTimeout(renderSignals, 5000);
 }
 
 function renderSettings() {

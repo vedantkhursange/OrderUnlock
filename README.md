@@ -54,6 +54,13 @@ Live prices for 141 F&O stocks · order blocks, BOS, FVG, VWAP · real futures O
 
 The same data stacked vertically: Market → Setups (tap to jump, hold for details) → Sectors → Flow → Bullish contenders + #1 → Bearish contenders + #1, with sticky **MARKET · FLOW · ▲TOP · ▼TOP** tabs.
 
+### Trade plans, signals & replay (learning tools, not predictions)
+
+- **Today's story** in every stock modal: open vs previous close, opening range, breakout time, day high/low, VWAP position, futures OI build-up, structure and demand/supply zone, written in plain English from the data.
+- **Intraday plan** per stock: setup (opening-range breakout, order-block pullback or VWAP pullback), side, entry, stop-loss, T1 (1.5R) and T2 (3R), confidence from six independent checks (✓ / ⚠ listed), a live state (WAIT → ARMED → TRIGGERED, or INVALID / EXPIRED), a what-to-do line, risk-based quantity hint and a **Copy plan** button for your broker or paper trading app. The plan is drawn on the chart.
+- **Session timing:** a top-bar phase pill and timeline (pre-open, opening range, prime time, midday lull, afternoon, no new trades after 14:30, 15:15 square-off).
+- **Signals & Plans page:** stocks at or near their entry, every plan, live signals recorded as they trigger with their real outcome (stop / T1 / T2 / squared) and an **opening-range breakout replay** of today on every stock with win rate and total R, so you can see honestly how a rule performs.
+
 ### Everywhere
 
 - **Stock modal:** intraday sparkline, a 5-minute chart with order blocks (live and mitigated), FVGs, VWAP, EMA-20, Z / S1–S3 / R1–R3. Stats: Rank, Conviction, OI and ΔOI, Build-up, RVOL, Δ VWAP, VWAP, OB, Z/S1, R1/R2, R:R, Structure, Day H/L, Pattern, Rule. **FLOW / TILE / SETUP** buttons jump to that stock; **← / →** step through the list.
@@ -112,6 +119,8 @@ lib/universe.js   141 NSE F&O stocks by sector (+ NIFTY, BANKNIFTY)
 lib/feed.js       Yahoo Finance chart API: 20-symbol spark batches (~1 s), 5-day 5-min candles round-robin, 429 back-off
 lib/oi.js         Upstox: instrument master → near-month futures, prev-day + intraday OI, optional OAuth quotes
 lib/engine.js     pivots, BOS, order blocks, FVG, VWAP, EMA, levels, conviction, R:R, tags
+lib/plans.js      session phases, intraday setups + states, plain-language story, ORB replay
+lib/signals.js    records triggered plans and tracks their outcome (saved to data/)
 server.js         ranks both sides, Server-Sent Events: state every 1 s, flow every 15 s; static files; Upstox auth routes
 public/           vanilla JS + canvas (app.js, pipeline.js, charts.js), no framework, no build
 ```
@@ -125,6 +134,7 @@ public/           vanilla JS + canvas (app.js, pipeline.js, charts.js), no frame
 | `GET /api/flow` | Per-stock session % series |
 | `GET /api/stock/:sym` | Candles, VWAP, EMA, full analysis, intraday closes |
 | `GET /api/oi/status` | OI mode, coverage and freshness |
+| `GET /api/signals` | Session phase, all plans, live signal record, ORB replay + summary |
 
 ## Limits
 
